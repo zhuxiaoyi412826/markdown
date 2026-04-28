@@ -23,7 +23,7 @@ const elements = {
   readerContainer: document.getElementById('readerContainer'),
   readerContent: document.getElementById('readerContent'),
   markdownBody: document.getElementById('markdownBody'),
-  emptyState: document.getElementById('emptyState'),
+  homepage: document.getElementById('homepage'),
   toolbarTitle: document.getElementById('toolbarTitle'),
   tocList: document.getElementById('tocList'),
   progressBar: document.getElementById('progressBar'),
@@ -36,6 +36,7 @@ const elements = {
 };
 
 // ===== Storage Functions =====
+// 把当前网站的所有 “状态数据” 保存到浏览器本地存储
 function saveState() {
   localStorage.setItem('markdownReader', JSON.stringify({
     documents: state.documents,
@@ -88,8 +89,10 @@ async function fetchBijiFiles() {
     const response = await fetch('/api/biji-files');
     if (response.ok) {
       const data = await response.json();
-      if (data.success && data.files) {
-        window.bijiFiles = data.files;
+      if (data.success && data.tree) {
+        window.bijiTree = data.tree;
+        // 默认不展开任何文件夹
+        // collectFolders(window.bijiTree); // 注释掉这行，使文件夹默认关闭
         return true;
       }
     }
@@ -99,93 +102,220 @@ async function fetchBijiFiles() {
   return false;
 }
 
+// 递归遍历树形结构，收集所有文件
+function collectFilesFromTree(tree, parentPath = '', level = 1) {
+  const files = [];
+  for (const item of tree) {
+    // 将 Windows 路径分隔符转换为 URL 安全的格式
+    const safePath = item.path.replace(/\\/g, '/');
+    
+    if (item.type === 'file') {
+      files.push({
+        ...item,
+        level: level,
+        fullPath: safePath
+      });
+    } else if (item.type === 'folder' && item.children) {
+      // 先添加文件夹占位（不加载内容）
+      files.push({
+        type: 'folder',
+        name: item.name,
+        path: safePath,
+        level: level
+      });
+      // 递归处理子文件夹
+      const childFiles = collectFilesFromTree(item.children, safePath, level + 1);
+      files.push(...childFiles);
+    }
+  }
+  return files;
+}
+
 async function loadBijiDocuments() {
   // 尝试从 localStorage 读取缓存的 biji 文件列表
   const saved = localStorage.getItem('markdownReader');
   const savedData = saved ? JSON.parse(saved) : {};
   const bijiCache = savedData.bijiCache || {};
   
-  // 并行加载所有文件，大大提升速度
-  const loadPromises = window.bijiFiles.map(async (filename) => {
+  // 从树形结构收集所有文件
+  const allItems = collectFilesFromTree(window.bijiTree || []);
+  
+  // 并行加载所有文件
+  const loadPromises = allItems.map(async (item) => {
+    if (item.type === 'folder') {
+      // 将 Windows 路径分隔符转换为 URL 安全的格式
+      const safePath = item.path.replace(/\\/g, '/');
+      // 文件夹不加载内容，直接返回
+      return {
+        id: `folder-${safePath}`,
+        title: item.name,
+        content: '',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isBiji: true,
+        isFolder: true,
+        level: item.level,
+        path: safePath
+      };
+    }
+    
     try {
-      const response = await fetch(`biji/${encodeURIComponent(filename)}`, {
+      // 将 Windows 路径分隔符转换为 URL 路径分隔符
+      const urlPath = item.fullPath.replace(/\\/g, '/');
+      const response = await fetch(`biji/${encodeURIComponent(urlPath)}`, {
         cache: 'default',
         headers: {
-          'If-Modified-Since': bijiCache[filename] || ''
+          'If-Modified-Since': bijiCache[item.fullPath] || ''
         }
       });
       
       if (response.ok) {
         const content = await response.text();
-        const title = filename.replace(/\.md$/i, '');
+        // 将 Windows 路径分隔符转换为 URL 安全的格式
+        const safePath = item.fullPath.replace(/\\/g, '/');
         return {
-          id: `biji-${filename}`,
-          title: title,
+          id: `biji-${safePath}`,
+          title: item.title,
           content: content,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          isBiji: true
+          isBiji: true,
+          isFolder: false,
+          level: item.level,
+          path: item.fullPath
         };
       } else if (response.status === 304) {
-        // 文件未修改，使用缓存的文档
-        const cachedDoc = state.documents.find(d => d.id === `biji-${filename}`);
+        const cachedDoc = state.documents.find(d => d.id === `biji-${item.fullPath}`);
         return cachedDoc;
       }
     } catch (err) {
-      console.warn(`无法加载文件 ${filename}:`, err);
+      console.warn(`无法加载文件 ${item.fullPath}:`, err);
     }
     return null;
   });
   
-  // 并行执行所有请求
   const results = await Promise.all(loadPromises);
   return results.filter(doc => doc !== null);
 }
 
 async function loadBijiDocumentsAndRefresh() {
   const hasApi = await fetchBijiFiles();
-  if (hasApi && window.bijiFiles.length > 0) {
+  if (hasApi && window.bijiTree && window.bijiTree.length > 0) {
     const bijiDocs = await loadBijiDocuments();
     const nonBijiDocs = state.documents.filter(d => !d.isBiji);
     state.documents = [...bijiDocs, ...nonBijiDocs];
     renderDocuments();
     
-    if (!state.currentDocId && state.documents.length > 0) {
-      selectDocument(state.documents[0].id);
-    }
-    
-    alert(`成功加载 ${bijiDocs.length} 个 biji 文档！`);
+    alert(`成功加载 ${bijiDocs.length} 个 biji 项目（文件夹和文件）！`);
   } else {
     alert('无法加载 biji 文档，请确保服务器正在运行');
   }
 }
 
+// 展开的文件夹状态
+const expandedFolders = new Set();
+
+// 递归收集所有文件夹路径（用于默认展开）
+function collectFolders(tree) {
+  for (const item of tree) {
+    if (item.type === 'folder') {
+      // 将 Windows 路径分隔符转换为 URL 安全的格式
+      const safePath = item.path.replace(/\\/g, '/');
+      expandedFolders.add(safePath);
+      if (item.children) {
+        collectFolders(item.children);
+      }
+    }
+  }
+}
+
+// 扁平化渲染树形结构
+function renderTree(tree, level = 1) {
+  let html = '';
+  
+  for (const item of tree) {
+    if (item.type === 'folder') {
+      // 将 Windows 路径分隔符转换为 URL 安全的格式
+      const safePath = item.path.replace(/\\/g, '/');
+      const isExpanded = expandedFolders.has(safePath);
+      const arrowClass = item.hasChildren ? `arrow ${isExpanded ? 'expanded' : ''}` : 'arrow empty';
+      
+      html += `
+      <div class="doc-item folder level-${level}" data-id="folder-${safePath}" data-path="${safePath}">
+        <div class="doc-title">
+          <span class="${arrowClass}">▶</span>
+          <span class="folder-icon">📁</span>
+          <span class="folder-name">${escapeHtml(item.name)}</span>
+        </div>
+      </div>
+      `;
+      
+      // 如果展开且有子项，递归渲染
+      if (isExpanded && item.children) {
+        html += renderTree(item.children, level + 1);
+      }
+    } else {
+      // 将 Windows 路径分隔符转换为 URL 安全的格式
+      const safePath = item.path.replace(/\\/g, '/');
+      html += `
+      <div class="doc-item file level-${level} ${state.currentDocId === `biji-${safePath}` ? 'active' : ''}" data-id="biji-${safePath}" data-path="${safePath}">
+        <div class="doc-title">📄 ${escapeHtml(item.title)}</div>
+        <div class="doc-date">${formatDate(Date.now())}</div>
+      </div>
+      `;
+    }
+  }
+  
+  return html;
+}
+
 // ===== Document Functions =====
 function renderDocuments(filter = '') {
-  const filtered = filter
-    ? state.documents.filter(doc => 
-        doc.title.toLowerCase().includes(filter.toLowerCase()) ||
-        doc.content.toLowerCase().includes(filter.toLowerCase())
-      )
-    : state.documents;
+  // 如果有 bijiTree，渲染树形结构
+  if (window.bijiTree && window.bijiTree.length > 0) {
+    elements.documentList.innerHTML = renderTree(window.bijiTree, 1);
+  } else {
+    // 否则渲染普通文档列表
+    const filtered = filter
+      ? state.documents.filter(doc => 
+          doc.title.toLowerCase().includes(filter.toLowerCase()) ||
+          doc.content.toLowerCase().includes(filter.toLowerCase())
+        )
+      : state.documents;
 
-  elements.documentList.innerHTML = filtered.map(doc => `
-    <div class="doc-item ${doc.id === state.currentDocId ? 'active' : ''}" data-id="${doc.id}">
-      <div class="doc-title">${escapeHtml(doc.title)}${doc.isBiji ? ' 📁' : ''}</div>
-      <div class="doc-date">${formatDate(doc.updatedAt)}</div>
-      ${doc.isBiji ? '' : `
-      <div class="doc-actions">
-        <button class="btn-small delete" data-action="delete" data-id="${doc.id}">删除</button>
+    elements.documentList.innerHTML = filtered.map(doc => {
+      return `
+      <div class="doc-item file level-1 ${doc.id === state.currentDocId ? 'active' : ''}" data-id="${doc.id}">
+        <div class="doc-title">📄 ${escapeHtml(doc.title)}</div>
+        <div class="doc-date">${formatDate(doc.updatedAt)}</div>
+        ${doc.isBiji ? '' : `
+        <div class="doc-actions">
+          <button class="btn-small delete" data-action="delete" data-id="${doc.id}">删除</button>
+        </div>
+        `}
       </div>
-      `}
-    </div>
-  `).join('');
+      `;
+    }).join('');
+  }
 
   // Add click events
   elements.documentList.querySelectorAll('.doc-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('delete')) return;
-      selectDocument(item.dataset.id);
+      
+      if (item.classList.contains('folder')) {
+        // 切换文件夹展开/收起状态
+        const path = item.dataset.path;
+        if (expandedFolders.has(path)) {
+          expandedFolders.delete(path);
+        } else {
+          expandedFolders.add(path);
+        }
+        renderDocuments();
+      } else {
+        // 打开文档
+        selectDocument(item.dataset.id);
+      }
     });
   });
 
@@ -204,7 +334,7 @@ function selectDocument(id) {
   
   if (doc) {
     elements.toolbarTitle.textContent = doc.title;
-    elements.emptyState.style.display = 'none';
+    elements.homepage.style.display = 'none';
     elements.markdownBody.style.display = 'block';
     
     // Render markdown
@@ -250,7 +380,7 @@ function deleteDocument(id) {
   state.documents = state.documents.filter(d => d.id !== id);
   if (state.currentDocId === id) {
     state.currentDocId = null;
-    elements.emptyState.style.display = 'flex';
+    elements.homepage.style.display = 'block';
     elements.markdownBody.style.display = 'none';
     elements.toolbarTitle.textContent = 'Markdown 阅读器';
   }
@@ -268,7 +398,7 @@ function updateDocument(id, content) {
     renderDocuments(elements.searchInput.value);
   }
 }
-
+// 函数的主要功能是处理用户上传的文件列表，将每个文件的内容读取后转换为文档对象并添加到应用的状态中。
 // ===== Upload Functions =====
 function handleFileUpload(files) {
   const fileArray = Array.from(files);
@@ -596,7 +726,8 @@ function initEventListeners() {
     }
   });
 
-  // Handle URL hash
+  // URL hash 处理：如果 URL 包含文档 hash，自动打开对应文档
+  // 例如：http://localhost:5000/#doc-biji-必备算法.md
   if (window.location.hash) {
     const docId = window.location.hash.replace('#doc-', '');
     if (docId && state.documents.find(d => d.id === docId)) {
@@ -634,21 +765,23 @@ async function init() {
   applySettings();
   initEventListeners();
 
-  // 先渲染已有文档（快速显示页面）
+  // 先加载 biji 文件结构（需要等待）
+  await fetchBijiFiles();
+  
+  // 现在渲染文档列表（树形结构）
   renderDocuments();
   
-  if (!state.currentDocId && state.documents.length > 0) {
-    selectDocument(state.documents[0].id);
-  }
+  // 默认显示首页，不自动选择文档
+  // 用户需要从左侧列表选择文档来阅读
 
-  // 后台异步加载 biji 文件夹文档，不阻塞页面显示
+  // 后台异步加载 biji 文档内容
   loadBijiDocumentsAsync();
 }
 
 async function loadBijiDocumentsAsync() {
   try {
-    const hasApi = await fetchBijiFiles();
-    if (hasApi && window.bijiFiles.length > 0) {
+    // 直接使用已加载的 bijiTree（在 init 中已加载）
+    if (window.bijiTree && window.bijiTree.length > 0) {
       const bijiDocs = await loadBijiDocuments();
       const nonBijiDocs = state.documents.filter(d => !d.isBiji);
       
@@ -663,10 +796,8 @@ async function loadBijiDocumentsAsync() {
         state.documents = [...bijiDocs, ...nonBijiDocs];
         renderDocuments();
         
-        // 如果当前没有选中文档，选中第一个
-        if (!state.currentDocId && state.documents.length > 0) {
-          selectDocument(state.documents[0].id);
-        }
+        // 默认显示首页，不自动选择文档
+        // 用户需要从左侧列表选择文档来阅读
       }
       
       console.log('已加载 biji 文档:', bijiDocs.length, '个');

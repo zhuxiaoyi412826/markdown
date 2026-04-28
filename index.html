@@ -98,15 +98,54 @@
       </div>
       <div class="reader-container" id="readerContainer">
         <div class="reader-content" id="readerContent">
-          <div class="empty-state" id="emptyState">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-            </svg>
-            <h3>选择一个文档开始阅读</h3>
-            <p>从左侧列表选择文档，或点击 + 创建新文档</p>
+          <div class="homepage" id="homepage">
+            <div class="homepage-content">
+              <div class="homepage-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+              </div>
+              <h1>Markdown 笔记阅读器</h1>
+              <p class="homepage-subtitle">优雅地阅读和管理您的 Markdown 笔记</p>
+              
+              <div class="homepage-features">
+                <div class="feature-card">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                  </svg>
+                  <h3>实时渲染</h3>
+                  <p>支持完整的 Markdown 语法，代码高亮显示</p>
+                </div>
+                <div class="feature-card">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10"></path>
+                  </svg>
+                  <h3>本地存储</h3>
+                  <p>所有数据保存在本地，数据安全有保障</p>
+                </div>
+                <div class="feature-card">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11.38 2.098C6.296 2.562 3 6.036 3 10.5c0 2.21 1.206 4.208 3 5.5a.5.5 0 0 1 .201.057c.983.32 2.034.57 3.169.57 1.135 0 2.186-.25 3.169-.57a.5.5 0 0 1 .2-.057c1.794-1.292 3-3.29 3-5.5 0-4.464-3.296-7.938-8.38-8.402z"></path>
+                    <path d="M12.5 8a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"></path>
+                  </svg>
+                  <h3>主题切换</h3>
+                  <p>支持日间/夜间主题，保护您的眼睛</p>
+                </div>
+              </div>
+              
+              <div class="homepage-usage">
+                <h3>使用方法</h3>
+                <ul>
+                  <li><strong>📂 浏览文档</strong> - 从左侧列表选择文档阅读</li>
+                  <li><strong>⬆️ 上传文档</strong> - 点击上传按钮导入 Markdown 文件</li>
+                  <li><strong>✏️ 新建文档</strong> - 点击 + 按钮创建新文档</li>
+                  <li><strong>📁 biji 文件夹</strong> - 放入 biji 文件夹的文档会自动加载</li>
+                </ul>
+              </div>
+            </div>
           </div>
           <div class="markdown-body" id="markdownBody" style="display: none;"></div>
         </div>

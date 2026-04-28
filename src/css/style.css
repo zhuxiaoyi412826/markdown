@@ -12,7 +12,7 @@
   --border-color: #e5e7eb;
   --code-bg: #f3f4f6;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --sidebar-width: 280px;
+  --sidebar-width: 240px;
   --toc-width: 280px;
   --header-height: 56px;
 }
@@ -121,11 +121,13 @@ html, body {
 }
 
 .doc-item {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
-  border-bottom: 1px solid var(--border-color);
   position: relative;
   transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .doc-item:hover {
@@ -134,22 +136,91 @@ html, body {
 
 .doc-item.active {
   background: var(--active-bg);
+}
+
+.doc-item.level-1 {
+  padding-left: 0.5rem;
+}
+
+.doc-item.level-2 {
+  padding-left: 1.5rem;
+}
+
+.doc-item.level-3 {
+  padding-left: 2.5rem;
+}
+
+.doc-item.level-4 {
+  padding-left: 3.5rem;
+}
+
+.doc-item.level-5 {
+  padding-left: 4.5rem;
+}
+
+.doc-item.folder {
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: pointer;
+  background: rgba(59, 130, 246, 0.05);
   border-left: 3px solid var(--primary-color);
+}
+
+.doc-item.folder:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.doc-item.folder .doc-date {
+  display: none;
+}
+
+.doc-item.file {
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.folder-name {
+  color: var(--primary-color);
+}
+
+.folder-icon {
+  margin-right: 0.25rem;
+}
+
+/* 箭头样式 */
+.arrow {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+  text-align: center;
+  line-height: 12px;
+}
+
+.arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.arrow.empty {
+  color: transparent;
 }
 
 .doc-title {
   font-weight: 500;
   font-size: 0.875rem;
-  padding-right: 2rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
 
 .doc-date {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
-  margin-top: 0.25rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .doc-actions {
@@ -247,17 +318,17 @@ html, body {
 }
 
 .reader-content {
-  max-width: 800px;
+  max-width: 960px;
   margin: 0 auto;
   line-height: 1.8;
 }
 
 .reader-content.wide {
-  max-width: 1000px;
+  max-width: 1100px;
 }
 
 .reader-content.narrow {
-  max-width: 600px;
+  max-width: 700px;
 }
 
 /* Markdown Styles */
@@ -783,4 +854,119 @@ html, body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* Homepage Styles */
+.homepage {
+  display: block;
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.homepage-content {
+  text-align: center;
+}
+
+.homepage-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.5rem;
+  color: var(--primary-color);
+}
+
+.homepage-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.homepage h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+}
+
+.homepage-subtitle {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  margin-bottom: 2.5rem;
+}
+
+.homepage-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.feature-card {
+  background: var(--sidebar-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.feature-card svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+}
+
+.feature-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+}
+
+.feature-card p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.homepage-usage {
+  background: var(--sidebar-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: left;
+}
+
+.homepage-usage h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-color);
+  text-align: center;
+}
+
+.homepage-usage ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.homepage-usage li {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.homepage-usage li:last-child {
+  margin-bottom: 0;
+}
+
+.homepage-usage strong {
+  color: var(--text-color);
 }

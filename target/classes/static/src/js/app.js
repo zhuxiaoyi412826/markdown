@@ -819,19 +819,166 @@ function initEventListeners() {
     }
   });
 
-  // Export
-  document.getElementById('btnExport').addEventListener('click', () => {
+  // Export menu
+  function createExportMenu() {
+    let menu = document.getElementById('exportMenu');
+    if (menu) {
+      menu.remove();
+      return;
+    }
+    
+    menu = document.createElement('div');
+    menu.id = 'exportMenu';
+    menu.className = 'export-menu';
+    
+    const exportOptions = [
+      { id: 'md', label: '导出 MD 源文件', ext: '.md', type: 'text/markdown' },
+      { id: 'html', label: '导出 HTML', ext: '.html', type: 'text/html' },
+      { id: 'pdf', label: '导出 PDF', ext: '.pdf', type: 'application/pdf' },
+      { id: 'word', label: '导出 Word', ext: '.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+    ];
+    
+    exportOptions.forEach(option => {
+      const button = document.createElement('button');
+      button.className = 'export-option';
+      button.dataset.exportType = option.id;
+      button.innerHTML = option.label;
+      button.addEventListener('click', () => {
+        exportDocument(option.id);
+        menu.remove();
+      });
+      menu.appendChild(button);
+    });
+    
+    document.body.appendChild(menu);
+    
+    const btnExport = document.getElementById('btnExport');
+    const rect = btnExport.getBoundingClientRect();
+    menu.style.left = rect.left + 'px';
+    menu.style.top = (rect.bottom + 8) + 'px';
+    
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && e.target !== btnExport) {
+        menu.remove();
+      }
+    }, { once: true });
+  }
+  
+  function exportDocument(type) {
     if (!state.currentDocId) return;
     const doc = state.documents.find(d => d.id === state.currentDocId);
-    if (doc) {
-      const blob = new Blob([doc.content], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = doc.title + '.md';
-      a.click();
-      URL.revokeObjectURL(url);
+    if (!doc) return;
+    
+    let content, filename, mimeType;
+    
+    switch (type) {
+      case 'md':
+        content = doc.content;
+        filename = doc.title + '.md';
+        mimeType = 'text/markdown';
+        break;
+        
+      case 'html':
+        const rendered = marked.parse(doc.content);
+        content = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${doc.title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #333; }
+    h1, h2, h3 { margin-top: 1.5em; }
+    code { background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 1rem; color: #666; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+    a { color: #3b82f6; }
+  </style>
+</head>
+<body>
+${rendered}
+</body>
+</html>`;
+        filename = doc.title + '.html';
+        mimeType = 'text/html';
+        break;
+        
+      case 'pdf':
+        content = doc.content;
+        filename = doc.title + '.pdf';
+        mimeType = 'application/pdf';
+        // 使用浏览器打印功能生成PDF
+        const printWindow = window.open('', '_blank');
+        const pdfContent = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>${doc.title}</title>
+  <style>
+    @media print {
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 100%; margin: 0; padding: 1cm; }
+      h1, h2, h3 { page-break-after: avoid; }
+      pre { white-space: pre-wrap; }
     }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; }
+    h1, h2, h3 { margin-top: 1.5em; }
+    code { background: #f4f4f4; padding: 0.2em 0.4em; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 8px; }
+    blockquote { border-left: 4px solid #ccc; margin: 0; padding-left: 1rem; color: #666; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+  </style>
+</head>
+<body onload="window.print(); window.close();">
+${marked.parse(doc.content)}
+</body>
+</html>`;
+        printWindow.document.write(pdfContent);
+        printWindow.document.close();
+        return;
+        
+      case 'word':
+        const wordContent = marked.parse(doc.content);
+        content = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?mso-application progid="Word.Document"?>
+<w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:t>${doc.title}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t xml:space="preserve">${wordContent.replace(/<[^>]*>/g, '').replace(/\n/g, ' ')}</w:t>
+      </w:r>
+    </w:p>
+  </w:body>
+</w:wordDocument>`;
+        filename = doc.title + '.doc';
+        mimeType = 'application/msword';
+        break;
+        
+      default:
+        return;
+    }
+    
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  document.getElementById('btnExport').addEventListener('click', (e) => {
+    e.stopPropagation();
+    createExportMenu();
   });
 
   // Theme toggle

@@ -1021,6 +1021,36 @@ html, body {
   justify-content: center;
 }
 
+/* Export Menu */
+.export-menu {
+  position: fixed;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 0.5rem;
+  z-index: 1000;
+  min-width: 180px;
+}
+
+.export-option {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.export-option:hover {
+  background: var(--hover-bg);
+}
+
 /* Notes & Highlights */
 .highlight {
   background: rgba(255, 235, 59, 0.4);

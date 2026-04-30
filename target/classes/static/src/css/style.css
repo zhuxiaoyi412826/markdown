@@ -392,6 +392,204 @@ html, body {
   padding: 0;
 }
 
+/* Code block enhancements */
+.code-block-wrapper {
+  background: var(--code-bg);
+  border-radius: 8px;
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.code-lang {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.code-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.code-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.375rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.code-btn:hover {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+}
+
+.markdown-body pre {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.markdown-body pre.hljs {
+  padding: 1rem;
+}
+
+/* Line numbers styling */
+.hljs-ln {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100%;
+  border: none !important;
+}
+
+.hljs-ln tr {
+  border: none !important;
+  background: transparent !important;
+}
+
+.hljs-ln tr td {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  vertical-align: top;
+}
+
+/* Strong selector to override highlight.js-line-numbers plugin inline styles */
+.markdown-body pre.hljs > code.hljs + table.hljs-ln tbody tr td.hljs-ln-numbers,
+.markdown-body pre > code + table.hljs-ln tbody tr td.hljs-ln-numbers,
+.hljs-ln tbody tr td.hljs-ln-numbers,
+.hljs-ln-numbers {
+  text-align: center !important;
+  padding-right: 1px !important;
+  padding-left: 1px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  border-right: 1px solid var(--border-color) !important;
+  border-bottom: none !important;
+  user-select: none;
+  color: var(--text-secondary) !important;
+  font-size: 0.675em !important;
+  min-width: 2.25rem !important;
+  max-width: 2.25rem !important;
+  width: 2.25rem !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+  margin: 0 !important;
+}
+
+.hljs-ln-code {
+  padding-left: 1rem !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Force remove all horizontal lines from highlight.js */
+.hljs-ln > tbody > tr > td {
+  border-bottom: none !important;
+}
+
+.hljs-ln > tbody > tr {
+  border-bottom: none !important;
+}
+
+/* Fullscreen code modal */
+.code-fullscreen-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.code-fullscreen-modal.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.code-fullscreen-content {
+  width: 90%;
+  max-width: 1200px;
+  height: 85vh;
+  background: var(--bg-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.code-fullscreen-modal.show .code-fullscreen-content {
+  transform: scale(1);
+}
+
+.code-fullscreen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.code-fullscreen-lang {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.code-fullscreen-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.code-fullscreen-close:hover {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+}
+
+.code-fullscreen-code {
+  height: calc(100% - 56px);
+  overflow: auto;
+  margin: 0;
+  padding: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.code-fullscreen-code code {
+  font-size: inherit;
+}
+
 .markdown-body blockquote {
   border-left: 4px solid var(--primary-color);
   padding-left: 1rem;
@@ -447,6 +645,28 @@ html, body {
   display: flex;
   flex-direction: column;
   transition: transform 0.3s ease;
+  overflow: hidden;
+}
+
+.sidebar-right.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.sidebar-right.collapsed .toc-header h3 {
+  display: none;
+}
+
+.sidebar-right.collapsed .toc-list {
+  display: none;
+}
+
+.btn-icon.rotate svg {
+  transition: transform 0.3s ease;
+}
+
+.btn-icon.rotate.rotated svg {
+  transform: rotate(90deg);
 }
 
 .toc-header {

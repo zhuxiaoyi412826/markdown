@@ -3,7 +3,7 @@ const state = {
   documents: [],
   currentDocId: null,
   settings: {
-    theme: 'light',
+    theme: 'dark',
     fontSize: 16,
     lineHeight: 1.8,
     pageWidth: 'normal',
@@ -524,8 +524,159 @@ function renderMarkdown(content) {
 
   elements.markdownBody.innerHTML = marked.parse(content);
   
+  // Enhance code blocks
+  enhanceCodeBlocks();
+  
   // Generate TOC
   generateToc();
+}
+
+// Enhance code blocks with line numbers, copy button and fullscreen button
+function enhanceCodeBlocks() {
+  const codeBlocks = elements.markdownBody.querySelectorAll('pre');
+  
+  codeBlocks.forEach((pre, index) => {
+    const code = pre.querySelector('code');
+    if (!code) return;
+    
+    // Debug: log the actual class names
+    console.log('Code block found:', 'pre.className:', pre.className, 'code.className:', code.className);
+    
+    // Get language from class attribute - support multiple formats
+    let language = 'CODE';
+    const langMatch = code.className.match(/language-(\w+)/);
+    const hljsLangMatch = code.className.match(/hljs-(\w+)/);
+    const preLangMatch = pre.className.match(/language-(\w+)/);
+    
+    if (langMatch) {
+      language = langMatch[1].toUpperCase();
+    } else if (hljsLangMatch) {
+      language = hljsLangMatch[1].toUpperCase();
+    } else if (preLangMatch) {
+      language = preLangMatch[1].toUpperCase();
+    }
+    
+    // Normalize common language names
+    const langMap = {
+      'JS': 'JAVASCRIPT',
+      'PY': 'PYTHON',
+      'JAVA8': 'JAVA',
+      'JAVA11': 'JAVA'
+    };
+    if (langMap[language]) {
+      language = langMap[language];
+    }
+    
+    console.log('Detected language:', language);
+    
+    // Add line numbers
+    hljs.lineNumbersBlock(pre, {
+      singleLine: false
+    });
+    
+    // Create code block wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+    
+    // Create header with language label and buttons
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+    
+    const langLabel = document.createElement('span');
+    langLabel.className = 'code-lang';
+    langLabel.textContent = language;
+    
+    const buttons = document.createElement('div');
+    buttons.className = 'code-buttons';
+    
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'code-btn copy-btn';
+    copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    copyBtn.title = '复制代码';
+    copyBtn.addEventListener('click', () => {
+      const text = code.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        setTimeout(() => {
+          copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+        }, 2000);
+      });
+    });
+    
+    // Fullscreen button
+    const fullscreenBtn = document.createElement('button');
+    fullscreenBtn.className = 'code-btn fullscreen-btn';
+    fullscreenBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+    fullscreenBtn.title = '全屏查看';
+    fullscreenBtn.addEventListener('click', () => {
+      openCodeFullscreen(code.textContent, language);
+    });
+    
+    buttons.appendChild(copyBtn);
+    buttons.appendChild(fullscreenBtn);
+    header.appendChild(langLabel);
+    header.appendChild(buttons);
+    
+    // Wrap the pre element
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(header);
+    wrapper.appendChild(pre);
+  });
+}
+
+// Open code in fullscreen modal
+function openCodeFullscreen(code, language) {
+  const modal = document.createElement('div');
+  modal.className = 'code-fullscreen-modal';
+  
+  const content = document.createElement('div');
+  content.className = 'code-fullscreen-content';
+  
+  const header = document.createElement('div');
+  header.className = 'code-fullscreen-header';
+  
+  const langLabel = document.createElement('span');
+  langLabel.className = 'code-fullscreen-lang';
+  langLabel.textContent = language;
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'code-fullscreen-close';
+  closeBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  closeBtn.addEventListener('click', () => {
+    modal.remove();
+  });
+  
+  header.appendChild(langLabel);
+  header.appendChild(closeBtn);
+  
+  const codeContainer = document.createElement('pre');
+  codeContainer.className = 'code-fullscreen-code';
+  
+  const codeEl = document.createElement('code');
+  codeEl.className = `language-${language.toLowerCase()}`;
+  codeEl.textContent = code;
+  
+  codeContainer.appendChild(codeEl);
+  content.appendChild(header);
+  content.appendChild(codeContainer);
+  modal.appendChild(content);
+  
+  // Close on escape key
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+  
+  document.body.appendChild(modal);
+  modal.classList.add('show');
+  
+  // Highlight code in fullscreen
+  hljs.highlightElement(codeEl);
+  hljs.lineNumbersBlock(codeContainer, { singleLine: false });
 }
 
 function generateToc() {
@@ -695,6 +846,16 @@ function initEventListeners() {
     state.settings.showToc = !state.settings.showToc;
     applySettings();
     saveState();
+  });
+
+  // TOC collapse toggle - 收起/展开目录栏
+  document.getElementById('btnCollapseToc').addEventListener('click', () => {
+    const sidebar = document.querySelector('.sidebar-right');
+    const btn = document.getElementById('btnCollapseToc');
+    
+    // 切换收起状态
+    sidebar.classList.toggle('collapsed');
+    btn.classList.toggle('rotated');
   });
 
   // Settings panel

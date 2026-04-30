@@ -162,7 +162,8 @@ async function loadBijiDocuments() {
     try {
       // 将 Windows 路径分隔符转换为 URL 路径分隔符
       const urlPath = item.fullPath.replace(/\\/g, '/');
-      const response = await fetch(`biji/${encodeURIComponent(urlPath)}`, {
+      // 使用 Spring Boot API 获取文件内容
+      const response = await fetch(`/api/biji-file/${encodeURIComponent(urlPath)}`, {
         cache: 'default',
         headers: {
           'If-Modified-Since': bijiCache[item.fullPath] || ''

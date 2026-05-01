@@ -1,3 +1,59 @@
+// ===== Trie Dictionary Tree for Search Suggestions =====
+class TrieNode {
+  constructor() {
+    this.children = {};
+    this.isEndOfWord = false;
+    this.documents = []; // 存储包含此前缀的文档
+  }
+}
+
+class Trie {
+  constructor() {
+    this.root = new TrieNode();
+  }
+  
+  insert(word, document) {
+    let node = this.root;
+    for (const char of word.toLowerCase()) {
+      if (!node.children[char]) {
+        node.children[char] = new TrieNode();
+      }
+      node = node.children[char];
+      // 将文档添加到每个前缀节点
+      if (!node.documents.find(d => d.id === document.id)) {
+        node.documents.push(document);
+      }
+    }
+    node.isEndOfWord = true;
+  }
+  
+  search(prefix) {
+    let node = this.root;
+    for (const char of prefix.toLowerCase()) {
+      if (!node.children[char]) {
+        return [];
+      }
+      node = node.children[char];
+    }
+    return node.documents.slice(0, 10); // 返回最多10个匹配结果
+  }
+  
+  buildFromDocuments(documents) {
+    this.root = new TrieNode();
+    documents.forEach(doc => {
+      // 只索引文件名（不索引标题、内容、文件夹）
+      if (doc.path && !doc.isFolder) {
+        const fileName = doc.path.split('/').pop().replace('.md', '');
+        if (fileName && fileName.trim()) {
+          this.insert(fileName, doc);
+        }
+      }
+    });
+  }
+}
+
+const searchTrie = new Trie();
+
 // ===== App State =====
 const state = {
   documents: [],
@@ -207,11 +263,15 @@ async function loadBijiDocumentsAndRefresh() {
     const bijiDocs = await loadBijiDocuments();
     const nonBijiDocs = state.documents.filter(d => !d.isBiji);
     state.documents = [...bijiDocs, ...nonBijiDocs];
+    
+    // 构建Trie搜索树
+    searchTrie.buildFromDocuments(state.documents);
+    
     renderDocuments();
     
-    alert(`成功加载 ${bijiDocs.length} 个 biji 项目（文件夹和文件）！`);
+    console.log(`成功加载 ${bijiDocs.length} 个 biji 项目，Trie搜索树已构建完成！`);
   } else {
-    alert('无法加载 biji 文档，请确保服务器正在运行');
+    console.log('无法加载 biji 文档，请确保服务器正在运行');
   }
 }
 
@@ -276,14 +336,55 @@ function renderTree(tree, level = 1) {
 function renderDocuments(filter = '') {
   // 如果有 bijiTree，渲染树形结构
   if (window.bijiTree && window.bijiTree.length > 0) {
+    if (filter.trim()) {
+      // 先使用Trie搜索标题
+      const trieResults = searchTrie.search(filter);
+      console.log('Trie搜索结果:', trieResults.length);
+      
+      // 如果Trie没有结果，回退到文件名搜索
+      let matchedDocs = trieResults;
+      if (trieResults.length === 0) {
+        console.log('Trie无结果，回退到文件名搜索');
+        matchedDocs = state.documents.filter(doc => {
+          if (!doc.path || doc.isFolder) return false;
+          const fileName = doc.path.split('/').pop().replace('.md', '').toLowerCase();
+          return fileName.includes(filter.toLowerCase());
+        });
+      }
+      
+      if (matchedDocs.length > 0) {
+        // 显示搜索结果列表
+        elements.documentList.innerHTML = matchedDocs.map(doc => {
+          return `
+          <div class="doc-item file level-1 ${doc.id === state.currentDocId ? 'active' : ''}" data-id="${doc.id}">
+            <div class="doc-title">📄 ${escapeHtml(doc.title)}</div>
+            <div class="doc-date">${formatDate(doc.updatedAt)}</div>
+            ${doc.isBiji ? '' : `
+            <div class="doc-actions">
+              <button class="btn-small delete" data-action="delete" data-id="${doc.id}">删除</button>
+            </div>
+            `}
+          </div>
+          `;
+        }).join('');
+        // 添加点击事件
+        addDocItemClickEvents();
+        return;
+      } else {
+        elements.documentList.innerHTML = '<div class="doc-empty">没有找到匹配的文档</div>';
+        return;
+      }
+    }
     elements.documentList.innerHTML = renderTree(window.bijiTree, 1);
   } else {
     // 否则渲染普通文档列表
     const filtered = filter
-      ? state.documents.filter(doc => 
-          doc.title.toLowerCase().includes(filter.toLowerCase()) ||
-          doc.content.toLowerCase().includes(filter.toLowerCase())
-        )
+      ? searchTrie.search(filter).length > 0 
+        ? searchTrie.search(filter)
+        : state.documents.filter(doc => 
+            doc.title.toLowerCase().includes(filter.toLowerCase()) ||
+            doc.content.toLowerCase().includes(filter.toLowerCase())
+          )
       : state.documents;
 
     elements.documentList.innerHTML = filtered.map(doc => {
@@ -301,6 +402,11 @@ function renderDocuments(filter = '') {
     }).join('');
   }
 
+  addDocItemClickEvents();
+}
+
+// Helper function to add click events to document items
+function addDocItemClickEvents() {
   // Add click events
   elements.documentList.querySelectorAll('.doc-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -766,9 +872,31 @@ function initEventListeners() {
   });
 
   // Search
+  // Search input event
   elements.searchInput.addEventListener('input', (e) => {
     renderDocuments(e.target.value);
+    updateSearchClearButton(e.target.value);
   });
+  
+  // Search button click
+  document.getElementById('searchBtn').addEventListener('click', () => {
+    renderDocuments(elements.searchInput.value);
+    elements.searchInput.focus();
+  });
+  
+  // Search clear button click
+  document.getElementById('searchClear').addEventListener('click', () => {
+    elements.searchInput.value = '';
+    renderDocuments('');
+    updateSearchClearButton('');
+    elements.searchInput.focus();
+  });
+  
+  // Update search clear button visibility
+  function updateSearchClearButton(value) {
+    const clearBtn = document.getElementById('searchClear');
+    clearBtn.style.display = value.trim() ? 'block' : 'none';
+  }
 
   // New document
   document.getElementById('btnNewDoc').addEventListener('click', () => {

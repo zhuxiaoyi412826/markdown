@@ -98,21 +98,70 @@ html, body {
 .search-box {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border-color);
+  position: relative;
 }
 
 .search-input {
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 2.5rem 0.5rem 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-color);
   color: var(--text-color);
   font-size: 0.875rem;
+  box-sizing: border-box;
 }
 
 .search-input:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+.search-clear {
+  position: absolute;
+  right: 2.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.search-clear:hover {
+  background: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.search-btn {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.search-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.doc-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
 .document-list {

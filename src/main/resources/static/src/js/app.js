@@ -61,6 +61,7 @@ const state = {
   settings: {
     theme: 'dark',
     fontSize: 16,
+    fontFamily: 'default',
     lineHeight: 1.8,
     pageWidth: 'normal',
     showToc: true
@@ -924,6 +925,24 @@ function generateToc() {
   });
 }
 
+// ===== Font Family Functions =====
+function getFontFamily(fontKey) {
+  const fonts = {
+    'default': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif',
+    'source-sans': '"Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+    'source-serif': '"Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", serif',
+    'wenquanyi': '"WenQuanYi Micro Hei", "WenQuanYi Zen Hei", "Noto Sans SC", sans-serif',
+    'monospace': '"JetBrains Mono", "Fira Code", "Consolas", "Monaco", "Menlo", monospace',
+    'noto-sans': '"Noto Sans SC", "Noto Sans", "PingFang SC", sans-serif',
+    'noto-serif': '"Noto Serif SC", "Noto Serif", "Songti SC", serif',
+    'pingfang': '"PingFang SC", "PingFang", "Microsoft YaHei", sans-serif',
+    'microsoft': '"Microsoft YaHei", "Microsoft YaHei UI", "PingFang SC", sans-serif',
+    'kaiti': '"KaiTi", "KaiTi SC", "STKaiti", "SimKai", serif',
+    'songti': '"SimSun", "Songti SC", "STSong", serif'
+  };
+  return fonts[fontKey] || fonts['default'];
+}
+
 // ===== Settings =====
 function applySettings() {
   // Theme
@@ -934,6 +953,10 @@ function applySettings() {
     document.documentElement.removeAttribute('data-theme');
     document.getElementById('hljs-theme').href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
   }
+
+  // Font family
+  const fontFamily = getFontFamily(state.settings.fontFamily);
+  document.documentElement.style.setProperty('--font-family', fontFamily);
 
   // Font size
   elements.readerContent.style.fontSize = state.settings.fontSize + 'px';
@@ -958,6 +981,7 @@ function applySettings() {
   document.querySelectorAll('#fontSizeOptions .setting-btn').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.size) === state.settings.fontSize);
   });
+  document.getElementById('fontFamilySelect').value = state.settings.fontFamily;
   document.querySelectorAll('#lineHeightOptions .setting-btn').forEach(btn => {
     btn.classList.toggle('active', parseFloat(btn.dataset.height) === state.settings.lineHeight);
   });
@@ -991,6 +1015,11 @@ function initEventListeners() {
         refreshBtn.classList.remove('refreshing');
       }, 500);
     }
+  });
+  
+  // Toggle sidebar left visibility
+  document.getElementById('btnCollapseAll').addEventListener('click', () => {
+    toggleSidebarLeft();
   });
 
   // Search
@@ -1311,6 +1340,13 @@ ${marked.parse(doc.content)}
     });
   });
 
+  // Font family options
+  document.getElementById('fontFamilySelect').addEventListener('change', (e) => {
+    state.settings.fontFamily = e.target.value;
+    applySettings();
+    saveState();
+  });
+
   document.querySelectorAll('#lineHeightOptions .setting-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       state.settings.lineHeight = parseFloat(btn.dataset.height);
@@ -1337,6 +1373,11 @@ ${marked.parse(doc.content)}
     state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light';
     applySettings();
     saveState();
+  });
+  
+  // Focus mode toggle
+  document.getElementById('btnFocusMode').addEventListener('click', () => {
+    toggleFocusMode();
   });
 
   // Mobile menu
@@ -1434,6 +1475,53 @@ function openLastReadDocument() {
     if (doc && !doc.isFolder) {
       openDocument(doc);
     }
+  }
+}
+
+function toggleSidebarLeft() {
+  const sidebar = document.getElementById('sidebarLeft');
+  const btn = document.getElementById('btnCollapseAll');
+  const mainContent = document.querySelector('.main-content');
+  
+  if (sidebar.classList.contains('collapsed')) {
+    // Expand sidebar
+    sidebar.classList.remove('collapsed');
+    mainContent.classList.remove('sidebar-collapsed');
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>`;
+    btn.title = '隐藏大纲';
+  } else {
+    // Collapse sidebar
+    sidebar.classList.add('collapsed');
+    mainContent.classList.add('sidebar-collapsed');
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="15 18 9 12 15 6"></polyline>
+    </svg>`;
+    btn.title = '显示大纲';
+  }
+}
+
+function toggleFocusMode() {
+  const body = document.body;
+  const isFocusMode = body.classList.contains('focus-mode');
+  const btn = document.getElementById('btnFocusMode');
+  
+  if (isFocusMode) {
+    body.classList.remove('focus-mode');
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+    </svg>
+    专注`;
+    btn.title = '专注阅读模式';
+  } else {
+    body.classList.add('focus-mode');
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+    退出`;
+    btn.title = '退出专注模式';
   }
 }
 

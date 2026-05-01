@@ -19,7 +19,7 @@
     <!-- Left Sidebar - Document List -->
     <aside class="sidebar-left" id="sidebarLeft">
       <div class="sidebar-header">
-        <h2>文档列表</h2>
+        <h2>大纲</h2>
         <div style="display: flex; gap: 0.5rem;">
           <button class="btn-icon" id="btnRefresh" title="刷新 biji 文件夹">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -34,6 +34,11 @@
             </svg>
           </button>
           <button class="btn-icon" id="btnNewDoc" title="新建文档">+</button>
+          <button class="btn-icon" id="btnCollapseAll" title="收缩所有文件夹">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
         </div>
       </div>
       <input type="file" id="fileInput" accept=".md,.markdown,.txt" multiple style="display: none;">
@@ -95,6 +100,12 @@
               <line x1="3" y1="6" x2="3.01" y2="6"></line>
               <line x1="3" y1="12" x2="3.01" y2="12"></line>
             </svg>
+          </button>
+          <button class="btn-toolbar" id="btnFocusMode" title="专注阅读模式">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+            </svg>
+            专注
           </button>
         </div>
       </div>
@@ -248,6 +259,22 @@
             <button class="setting-btn" data-size="18">18px</button>
             <button class="setting-btn" data-size="20">20px</button>
           </div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">字体</label>
+          <select class="setting-select" id="fontFamilySelect">
+            <option value="default">默认</option>
+            <option value="source-sans">思源黑体</option>
+            <option value="source-serif">思源宋体</option>
+            <option value="wenquanyi">文泉驿微米黑</option>
+            <option value="monospace">等宽字体</option>
+            <option value="noto-sans">Noto Sans SC</option>
+            <option value="noto-serif">Noto Serif SC</option>
+            <option value="pingfang">苹方字体</option>
+            <option value="microsoft">微软雅黑</option>
+            <option value="kaiti">楷体</option>
+            <option value="songti">宋体</option>
+          </select>
         </div>
         <div class="setting-group">
           <label class="setting-label">行高</label>

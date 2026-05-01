@@ -501,6 +501,9 @@ async function selectDocument(id) {
     // Render markdown
     renderMarkdown(doc.content);
     
+    // Trigger document changed event for page search
+    document.dispatchEvent(new Event('documentChanged'));
+    
     // Restore scroll position
     setTimeout(() => {
       const savedPos = state.scrollPositions[id] || 0;
@@ -628,13 +631,106 @@ function renderMarkdown(content) {
     gfm: true
   });
 
-  elements.markdownBody.innerHTML = marked.parse(content);
+  // Render content to article-content container
+  const articleContent = document.getElementById('articleContent');
+  articleContent.innerHTML = marked.parse(content);
   
   // Enhance code blocks
   enhanceCodeBlocks();
   
   // Generate TOC
   generateToc();
+  
+  // Update article stats
+  updateArticleStats(content);
+  
+  // Load comments
+  loadComments();
+}
+
+function updateArticleStats(content) {
+  // Calculate word count (Chinese characters + English words)
+  const chineseChars = (content.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const englishWords = (content.match(/[a-zA-Z]+/g) || []).length;
+  const totalWords = chineseChars + englishWords;
+  
+  // Calculate reading time (assuming 300 characters per minute)
+  const readingTime = Math.max(1, Math.ceil(totalWords / 300));
+  
+  // Update views count
+  updateViews();
+  
+  // Update DOM elements
+  document.getElementById('statWords').textContent = totalWords;
+  document.getElementById('statTime').textContent = readingTime;
+}
+
+function updateViews() {
+  if (!state.currentDocId) return;
+  
+  // Load views from localStorage
+  const viewsData = JSON.parse(localStorage.getItem('articleViews') || '{}');
+  const currentViews = viewsData[state.currentDocId] || 0;
+  
+  // Increment views (only once per session per document)
+  const sessionViews = JSON.parse(sessionStorage.getItem('sessionViews') || '{}');
+  if (!sessionViews[state.currentDocId]) {
+    viewsData[state.currentDocId] = currentViews + 1;
+    sessionViews[state.currentDocId] = true;
+    localStorage.setItem('articleViews', JSON.stringify(viewsData));
+    sessionStorage.setItem('sessionViews', JSON.stringify(sessionViews));
+  }
+  
+  // Update display
+  document.getElementById('statViews').textContent = viewsData[state.currentDocId] || 0;
+}
+
+function loadComments() {
+  if (!state.currentDocId) return;
+  
+  const comments = getComments(state.currentDocId);
+  const commentsList = document.getElementById('commentsList');
+  
+  if (comments.length === 0) {
+    commentsList.innerHTML = '<div class="comments-empty">暂无评论，快来发表第一条评论吧！</div>';
+    return;
+  }
+  
+  commentsList.innerHTML = comments.map(comment => `
+    <div class="comment-item">
+      <div class="comment-header">
+        <span class="comment-author">${escapeHtml(comment.author || '匿名用户')}</span>
+        <span class="comment-time">${formatDate(comment.createdAt)}</span>
+      </div>
+      <div class="comment-content">${escapeHtml(comment.content)}</div>
+    </div>
+  `).join('');
+}
+
+function getComments(docId) {
+  const allComments = JSON.parse(localStorage.getItem('articleComments') || '{}');
+  return allComments[docId] || [];
+}
+
+function addComment(content) {
+  if (!state.currentDocId || !content.trim()) return;
+  
+  const allComments = JSON.parse(localStorage.getItem('articleComments') || '{}');
+  if (!allComments[state.currentDocId]) {
+    allComments[state.currentDocId] = [];
+  }
+  
+  const comment = {
+    id: Date.now(),
+    author: '匿名用户',
+    content: content.trim(),
+    createdAt: Date.now()
+  };
+  
+  allComments[state.currentDocId].push(comment);
+  localStorage.setItem('articleComments', JSON.stringify(allComments));
+  
+  loadComments();
 }
 
 // Enhance code blocks with line numbers, copy button and fullscreen button
@@ -931,12 +1027,28 @@ function initEventListeners() {
   // Edit document
   document.getElementById('btnEdit').addEventListener('click', () => {
     if (!state.currentDocId) return;
+    
     const doc = state.documents.find(d => d.id === state.currentDocId);
-    if (doc) {
-      elements.editContent.value = doc.content;
-      elements.modalEdit.classList.add('show');
-      elements.overlay.classList.add('show');
+    if (!doc) return;
+    
+    // 要求输入密码
+    const password = prompt('请输入编辑密码：');
+    if (!password) {
+      alert('未输入密码，无法编辑');
+      return;
     }
+    
+    // 验证密码
+    const correctPassword = '412826zxyZXY';
+    if (password !== correctPassword) {
+      alert('密码错误，无法编辑');
+      return;
+    }
+    
+    // 密码正确，显示编辑界面
+    elements.editContent.value = doc.content;
+    elements.modalEdit.classList.add('show');
+    elements.overlay.classList.add('show');
   });
 
   document.getElementById('btnCancelEdit').addEventListener('click', closeModal);
@@ -944,6 +1056,28 @@ function initEventListeners() {
     if (state.currentDocId) {
       updateDocument(state.currentDocId, elements.editContent.value);
       closeModal();
+    }
+  });
+  
+  // Comment submit
+  document.getElementById('commentSubmit').addEventListener('click', () => {
+    const commentInput = document.getElementById('commentInput');
+    const content = commentInput.value;
+    if (content.trim()) {
+      addComment(content);
+      commentInput.value = '';
+    }
+  });
+  
+  // Comment input enter key
+  document.getElementById('commentInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      const content = e.target.value;
+      if (content.trim()) {
+        addComment(content);
+        e.target.value = '';
+      }
     }
   });
 
@@ -1261,13 +1395,329 @@ async function init() {
   
   // 现在渲染文档列表（树形结构）
   renderDocuments();
+}
+
+// ===== In-Page Search Functions =====
+class PageSearch {
+  constructor() {
+    this.panel = document.getElementById('pageSearchPanel');
+    this.toggle = document.getElementById('pageSearchToggle');
+    this.input = document.getElementById('pageSearchInput');
+    this.clearBtn = document.getElementById('pageSearchClear');
+    this.prevBtn = document.getElementById('pageSearchPrev');
+    this.nextBtn = document.getElementById('pageSearchNext');
+    this.closeBtn = document.getElementById('pageSearchClose');
+    this.stats = document.getElementById('pageSearchStats');
+    this.caseSensitive = document.getElementById('pageSearchCaseSensitive');
+    this.exactMatch = document.getElementById('pageSearchExactMatch');
+    
+    this.results = [];
+    this.currentIndex = -1;
+    this.contentTrie = null;
+    
+    this.init();
+  }
   
-  // 默认显示首页，不自动选择文档
-  // 用户需要从左侧列表选择文档来阅读
+  init() {
+    this.bindEvents();
+    this.createContentTrie();
+  }
+  
+  bindEvents() {
+    // Toggle panel
+    this.toggle.addEventListener('click', () => this.togglePanel());
+    
+    // Close panel
+    this.closeBtn.addEventListener('click', () => this.close());
+    
+    // Input events
+    this.input.addEventListener('input', (e) => this.handleInput(e.target.value));
+    this.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.findNext();
+      }
+    });
+    
+    // Clear button
+    this.clearBtn.addEventListener('click', () => this.clearSearch());
+    
+    // Navigation buttons
+    this.prevBtn.addEventListener('click', () => this.findPrev());
+    this.nextBtn.addEventListener('click', () => this.findNext());
+    
+    // Options change
+    this.caseSensitive.addEventListener('change', () => this.search(this.input.value));
+    this.exactMatch.addEventListener('change', () => this.search(this.input.value));
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        this.open();
+      }
+      if (e.key === 'Escape') {
+        this.close();
+      }
+    });
+    
+    // Re-create trie when document content changes
+    document.addEventListener('documentChanged', () => {
+      this.createContentTrie();
+    });
+  }
+  
+  createContentTrie() {
+    this.contentTrie = new Trie();
+    const content = document.getElementById('readerContent').textContent;
+    if (!content) return;
+    
+    // Extract unique words from content for Trie indexing
+    const words = content.toLowerCase().match(/[\u4e00-\u9fa5a-zA-Z0-9]+/g) || [];
+    const uniqueWords = [...new Set(words)];
+    
+    uniqueWords.forEach(word => {
+      if (word.length >= 2) {
+        this.contentTrie.insert(word, { word });
+      }
+    });
+  }
+  
+  togglePanel() {
+    if (this.panel.classList.contains('open')) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+  
+  open() {
+    this.panel.classList.add('open');
+    this.input.focus();
+    this.createContentTrie();
+  }
+  
+  close() {
+    this.panel.classList.remove('open');
+    this.clearSearch();
+    this.input.blur();
+  }
+  
+  handleInput(value) {
+    this.updateClearButton(value);
+    
+    if (!value.trim()) {
+      this.clearSearch();
+      return;
+    }
+    
+    this.search(value);
+  }
+  
+  search(query) {
+    if (!query.trim()) {
+      this.clearSearch();
+      return;
+    }
+    
+    this.removeHighlights();
+    this.results = [];
+    
+    const content = document.getElementById('readerContent');
+    if (!content) return;
+    
+    const textNodes = this.getTextNodes(content);
+    let matchIndex = 0;
+    
+    textNodes.forEach((node) => {
+      const text = node.nodeValue;
+      if (!text || text.trim() === '') return;
+      
+      const flags = this.caseSensitive.checked ? 'g' : 'gi';
+      let pattern;
+      
+      if (this.exactMatch.checked) {
+        // 精确匹配：完整单词匹配
+        pattern = new RegExp(`\\b${this.escapeRegex(query)}\\b`, flags);
+      } else {
+        // 模糊匹配：包含匹配
+        pattern = new RegExp(this.escapeRegex(query), flags);
+      }
+      
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        this.results.push({
+          node,
+          start: match.index,
+          end: match.index + match[0].length,
+          text: match[0],
+          index: matchIndex++
+        });
+        if (this.exactMatch.checked) break; // 精确匹配每个节点只匹配一次
+      }
+    });
+    
+    this.highlightResults();
+    this.updateStats();
+    this.updateButtons();
+    
+    if (this.results.length > 0 && this.currentIndex === -1) {
+      this.currentIndex = 0;
+      this.scrollToMatch(0);
+    }
+  }
+  
+  escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  
+  getTextNodes(element) {
+    const textNodes = [];
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while ((node = walker.nextNode())) {
+      // 跳过脚本、样式和空文本节点
+      if (node.parentNode.tagName !== 'SCRIPT' && 
+          node.parentNode.tagName !== 'STYLE' && 
+          node.nodeValue.trim() !== '') {
+        textNodes.push(node);
+      }
+    }
+    
+    return textNodes;
+  }
+  
+  highlightResults() {
+    this.results.forEach((result, index) => {
+      const { node, start, end } = result;
+      const text = node.nodeValue;
+      
+      if (start >= 0 && end <= text.length) {
+        const before = text.substring(0, start);
+        const match = text.substring(start, end);
+        const after = text.substring(end);
+        
+        const span = document.createElement('span');
+        span.className = `search-highlight${index === this.currentIndex ? ' active' : ''}`;
+        span.textContent = match;
+        
+        const parent = node.parentNode;
+        node.nodeValue = before;
+        
+        if (after) {
+          parent.insertBefore(document.createTextNode(after), node.nextSibling);
+        }
+        parent.insertBefore(span, node.nextSibling);
+      }
+    });
+  }
+  
+  removeHighlights() {
+    const highlights = document.querySelectorAll('.search-highlight');
+    highlights.forEach(highlight => {
+      const text = document.createTextNode(highlight.textContent);
+      highlight.parentNode.replaceChild(text, highlight);
+    });
+  }
+  
+  updateStats() {
+    const current = this.currentIndex + 1;
+    const total = this.results.length;
+    
+    if (total === 0) {
+      this.stats.textContent = '未找到相关内容';
+    } else {
+      this.stats.textContent = `${current}/${total}`;
+    }
+  }
+  
+  updateButtons() {
+    const hasResults = this.results.length > 0;
+    this.prevBtn.disabled = !hasResults;
+    this.nextBtn.disabled = !hasResults;
+  }
+  
+  findNext() {
+    if (this.results.length === 0) return;
+    
+    if (this.currentIndex >= 0) {
+      this.removeActiveHighlight();
+    }
+    
+    this.currentIndex = (this.currentIndex + 1) % this.results.length;
+    this.scrollToMatch(this.currentIndex);
+    this.updateActiveHighlight();
+    this.updateStats();
+  }
+  
+  findPrev() {
+    if (this.results.length === 0) return;
+    
+    if (this.currentIndex >= 0) {
+      this.removeActiveHighlight();
+    }
+    
+    this.currentIndex = (this.currentIndex - 1 + this.results.length) % this.results.length;
+    this.scrollToMatch(this.currentIndex);
+    this.updateActiveHighlight();
+    this.updateStats();
+  }
+  
+  scrollToMatch(index) {
+    const highlights = document.querySelectorAll('.search-highlight');
+    if (highlights[index]) {
+      highlights[index].scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+  }
+  
+  updateActiveHighlight() {
+    const highlights = document.querySelectorAll('.search-highlight');
+    highlights.forEach((highlight, index) => {
+      if (index === this.currentIndex) {
+        highlight.classList.add('active');
+      }
+    });
+  }
+  
+  removeActiveHighlight() {
+    const active = document.querySelector('.search-highlight.active');
+    if (active) {
+      active.classList.remove('active');
+    }
+  }
+  
+  clearSearch() {
+    this.input.value = '';
+    this.currentIndex = -1;
+    this.results = [];
+    this.removeHighlights();
+    this.updateStats();
+    this.updateButtons();
+    this.updateClearButton('');
+  }
+  
+  updateClearButton(value) {
+    this.clearBtn.style.display = value.trim() ? 'block' : 'none';
+  }
+}
+
+// Initialize page search when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  window.pageSearch = new PageSearch();
+});
 
   // 后台异步加载 biji 文档内容
   loadBijiDocumentsAsync();
-}
+
 
 async function loadBijiDocumentsAsync() {
   try {

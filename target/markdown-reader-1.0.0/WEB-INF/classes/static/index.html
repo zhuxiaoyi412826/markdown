@@ -99,6 +99,29 @@
         </div>
       </div>
       <div class="reader-container" id="readerContainer">
+        <!-- In-page search box -->
+        <div class="page-search" id="pageSearch">
+          <button class="page-search-toggle" id="pageSearchToggle" title="搜索 (Ctrl+F)">
+            🔍
+          </button>
+          <div class="page-search-panel" id="pageSearchPanel">
+            <div class="page-search-input-wrapper">
+              <input type="text" class="page-search-input" id="pageSearchInput" placeholder="搜索本文档...">
+              <button class="page-search-clear" id="pageSearchClear" style="display: none;">✕</button>
+            </div>
+            <div class="page-search-stats" id="pageSearchStats">0/0</div>
+            <div class="page-search-actions">
+              <button class="page-search-btn" id="pageSearchPrev" disabled>上一条</button>
+              <button class="page-search-btn" id="pageSearchNext" disabled>下一条</button>
+              <button class="page-search-btn page-search-close" id="pageSearchClose">关闭</button>
+            </div>
+            <div class="page-search-options">
+              <label><input type="checkbox" id="pageSearchCaseSensitive"> 大小写敏感</label>
+              <label><input type="checkbox" id="pageSearchExactMatch"> 精确匹配</label>
+            </div>
+          </div>
+        </div>
+        
         <div class="reader-content" id="readerContent">
           <div class="homepage" id="homepage">
             <div class="homepage-content">
@@ -149,7 +172,43 @@
               </div>
             </div>
           </div>
-          <div class="markdown-body" id="markdownBody" style="display: none;"></div>
+          <div class="markdown-body" id="markdownBody" style="display: none;">
+            <!-- Article stats header -->
+            <div class="article-stats" id="articleStats">
+              <span class="stat-item">
+                <span class="stat-icon">👁️</span>
+                <span class="stat-value" id="statViews">0</span>
+                <span class="stat-label">阅读</span>
+              </span>
+              <span class="stat-divider">|</span>
+              <span class="stat-item">
+                <span class="stat-icon">📝</span>
+                <span class="stat-value" id="statWords">0</span>
+                <span class="stat-label">字数</span>
+              </span>
+              <span class="stat-divider">|</span>
+              <span class="stat-item">
+                <span class="stat-icon">⏱️</span>
+                <span class="stat-value" id="statTime">0</span>
+                <span class="stat-label">分钟</span>
+              </span>
+            </div>
+            
+            <!-- Article content -->
+            <div class="article-content" id="articleContent"></div>
+            
+            <!-- Comments section -->
+            <div class="comments-section" id="commentsSection">
+              <h3 class="comments-title">💬 评论</h3>
+              <div class="comments-list" id="commentsList">
+                <!-- Comments will be displayed here -->
+              </div>
+              <div class="comment-form">
+                <textarea class="comment-input" id="commentInput" placeholder="写下你的评论..."></textarea>
+                <button class="comment-submit" id="commentSubmit">发表评论</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>

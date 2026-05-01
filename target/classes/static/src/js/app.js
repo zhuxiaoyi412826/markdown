@@ -646,6 +646,23 @@ function renderMarkdown(content) {
   
   // Load comments
   loadComments();
+  
+  // Auto scroll to last reading position after a short delay
+  setTimeout(() => {
+    scrollToLastPosition();
+  }, 300);
+}
+
+function scrollToLastPosition() {
+  if (!state.currentDocId) return;
+  
+  const scrollTop = state.scrollPositions[state.currentDocId] || 0;
+  if (scrollTop > 0) {
+    elements.readerContainer.scrollTo({
+      top: scrollTop,
+      behavior: 'smooth'
+    });
+  }
 }
 
 function updateArticleStats(content) {
@@ -964,7 +981,16 @@ function formatDate(timestamp) {
 function initEventListeners() {
   // 刷新 biji 文件夹
   document.getElementById('btnRefresh').addEventListener('click', async () => {
-    await loadBijiDocumentsAndRefresh();
+    const refreshBtn = document.getElementById('btnRefresh');
+    refreshBtn.classList.add('refreshing');
+    
+    try {
+      await loadBijiDocumentsAndRefresh();
+    } finally {
+      setTimeout(() => {
+        refreshBtn.classList.remove('refreshing');
+      }, 500);
+    }
   });
 
   // Search
@@ -1395,6 +1421,20 @@ async function init() {
   
   // 现在渲染文档列表（树形结构）
   renderDocuments();
+  
+  // Auto open last read document if exists
+  setTimeout(() => {
+    openLastReadDocument();
+  }, 100);
+}
+
+function openLastReadDocument() {
+  if (state.currentDocId) {
+    const doc = state.documents.find(d => d.id === state.currentDocId);
+    if (doc && !doc.isFolder) {
+      openDocument(doc);
+    }
+  }
 }
 
 // ===== In-Page Search Functions =====

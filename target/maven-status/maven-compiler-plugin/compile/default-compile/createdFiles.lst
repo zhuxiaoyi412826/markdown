@@ -1,5 +1,0 @@
-com\example\Application.class
-com\example\ServletInitializer.class
-com\example\config\OpenApiConfig.class
-com\example\config\WebConfig.class
-com\example\controller\BijiController.class

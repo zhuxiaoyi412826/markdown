@@ -58,6 +58,7 @@ const searchTrie = new Trie();
 const state = {
   documents: [],
   currentDocId: null,
+  userTree: null,
   settings: {
     theme: 'dark',
     fontSize: 16,
@@ -70,6 +71,8 @@ const state = {
   notes: {},
   highlights: {}
 };
+
+let didLoadUserFolderExpansion = false;
 
 // ===== DOM Elements =====
 const elements = {
@@ -94,14 +97,57 @@ const elements = {
 
 // ===== Storage Functions =====
 // 把当前网站的所有 “状态数据” 保存到浏览器本地存储
+function serializeDocumentsForStorage(documents) {
+  return (documents || []).map(doc => {
+    if (doc && doc.isBiji) {
+      return {
+        id: doc.id,
+        title: doc.title,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        isBiji: true,
+        isFolder: !!doc.isFolder,
+        level: doc.level,
+        path: doc.path
+      };
+    }
+    return doc;
+  });
+}
+
 function saveState() {
-  localStorage.setItem('markdownReader', JSON.stringify({
-    documents: state.documents,
+  const payload = {
+    documents: serializeDocumentsForStorage(state.documents),
+    currentDocId: state.currentDocId,
+    userTree: state.userTree,
     settings: state.settings,
     scrollPositions: state.scrollPositions,
     notes: state.notes,
-    highlights: state.highlights
-  }));
+    highlights: state.highlights,
+    expandedFolders: Array.from(expandedFolders),
+    expandedUserFolders: Array.from(expandedUserFolders)
+  };
+  
+  try {
+    localStorage.setItem('markdownReader', JSON.stringify(payload));
+  } catch (e) {
+    try {
+      const reduced = {
+        ...payload,
+        documents: payload.documents.filter(d => d && !d.isBiji)
+      };
+      localStorage.setItem('markdownReader', JSON.stringify(reduced));
+    } catch {
+      localStorage.setItem('markdownReader', JSON.stringify({
+        currentDocId: payload.currentDocId,
+        userTree: payload.userTree,
+        settings: payload.settings,
+        scrollPositions: payload.scrollPositions,
+        expandedFolders: payload.expandedFolders,
+        expandedUserFolders: payload.expandedUserFolders
+      }));
+    }
+  }
 }
 
 function loadState() {
@@ -137,6 +183,28 @@ function loadState() {
     state.scrollPositions = data.scrollPositions || {};
     state.notes = data.notes || {};
     state.highlights = data.highlights || {};
+    state.currentDocId = data.currentDocId || null;
+    
+    const savedExpanded = data.expandedFolders || (data.ui && data.ui.expandedFolders) || [];
+    expandedFolders.clear();
+    if (Array.isArray(savedExpanded) && savedExpanded.length <= 500) {
+      savedExpanded.forEach(p => {
+        if (typeof p === 'string' && p.trim()) expandedFolders.add(p);
+      });
+    }
+    
+    if (data.userTree && typeof data.userTree === 'object') {
+      state.userTree = data.userTree;
+    }
+    
+    didLoadUserFolderExpansion = Array.isArray(data.expandedUserFolders);
+    const savedUserExpanded = data.expandedUserFolders || [];
+    expandedUserFolders.clear();
+    if (Array.isArray(savedUserExpanded) && savedUserExpanded.length <= 1000) {
+      savedUserExpanded.forEach(id => {
+        if (typeof id === 'string' && id.trim()) expandedUserFolders.add(id);
+      });
+    }
   }
 }
 
@@ -278,6 +346,41 @@ async function loadBijiDocumentsAndRefresh() {
 
 // 展开的文件夹状态
 const expandedFolders = new Set();
+const expandedUserFolders = new Set();
+
+function createUserTreeRoot() {
+  return { id: 'user-root', type: 'folder', name: '我的文档', children: [] };
+}
+
+function ensureUserTree() {
+  if (!state.userTree || typeof state.userTree !== 'object' || state.userTree.type !== 'folder') {
+    state.userTree = createUserTreeRoot();
+  }
+  if (!didLoadUserFolderExpansion && expandedUserFolders.size === 0) {
+    expandedUserFolders.add(state.userTree.id);
+  }
+}
+
+function collectUserFileIds(node, out = []) {
+  if (!node) return out;
+  if (node.type === 'file') {
+    out.push(node.id);
+    return out;
+  }
+  (node.children || []).forEach(child => collectUserFileIds(child, out));
+  return out;
+}
+
+function migrateFlatUserDocsIntoTree() {
+  ensureUserTree();
+  const existingIds = new Set(collectUserFileIds(state.userTree));
+  const flatDocs = state.documents.filter(d => !d.isBiji && !d.isFolder);
+  flatDocs.forEach(d => {
+    if (!existingIds.has(d.id)) {
+      state.userTree.children.push({ id: d.id, type: 'file', name: d.title });
+    }
+  });
+}
 
 // 递归收集所有文件夹路径（用于默认展开）
 function collectFolders(tree) {
@@ -333,6 +436,267 @@ function renderTree(tree, level = 1) {
   return html;
 }
 
+function renderUserTree(node, level = 1, parentId = null) {
+  ensureUserTree();
+  if (!node) return '';
+  
+  let html = '';
+  
+  if (node.type === 'folder') {
+    const isExpanded = expandedUserFolders.has(node.id);
+    const hasChildren = (node.children || []).length > 0;
+    const arrowClass = hasChildren ? `arrow ${isExpanded ? 'expanded' : ''}` : 'arrow empty';
+    const isRoot = node.id === 'user-root';
+    const draggableAttr = isRoot ? '' : 'draggable="true" data-draggable="true"';
+    
+    html += `
+      <div class="doc-item folder level-${level}" data-kind="user" data-node-id="${node.id}" data-parent-id="${parentId || ''}" ${draggableAttr}>
+        <div class="doc-title">
+          <span class="${arrowClass}">▶</span>
+          <span class="folder-icon">📁</span>
+          <span class="folder-name">${escapeHtml(node.name)}</span>
+        </div>
+        <div class="doc-actions">
+          <button class="btn-small settings" data-action="node-menu" data-node-id="${node.id}">⚙</button>
+        </div>
+      </div>
+    `;
+    
+    if (isExpanded && node.children) {
+      node.children.forEach(child => {
+        html += renderUserTree(child, level + 1, node.id);
+      });
+    }
+    return html;
+  }
+  
+  const docId = node.id;
+  const doc = state.documents.find(d => d.id === docId);
+  const title = node.name || (doc ? doc.title : '未命名');
+  html += `
+    <div class="doc-item file level-${level} ${state.currentDocId === docId ? 'active' : ''}" data-kind="user" data-id="${docId}" data-node-id="${docId}" data-parent-id="${parentId || ''}" draggable="true" data-draggable="true">
+      <div class="doc-title">📄 ${escapeHtml(title)}</div>
+      <div class="doc-date">${formatDate(doc ? doc.updatedAt : Date.now())}</div>
+      <div class="doc-actions">
+        <button class="btn-small settings" data-action="node-menu" data-node-id="${docId}">⚙</button>
+      </div>
+    </div>
+  `;
+  return html;
+}
+
+function findUserNode(nodeId, node = null, parent = null) {
+  ensureUserTree();
+  const root = node || state.userTree;
+  if (!root) return null;
+  if (root.id === nodeId) return { node: root, parent, index: null };
+  if (root.type !== 'folder' || !root.children) return null;
+  
+  for (let i = 0; i < root.children.length; i++) {
+    const child = root.children[i];
+    if (child.id === nodeId) return { node: child, parent: root, index: i };
+    const found = findUserNode(nodeId, child, root);
+    if (found) return found;
+  }
+  return null;
+}
+
+function isDescendantFolder(folderNode, possibleDescendantId) {
+  if (!folderNode || folderNode.type !== 'folder') return false;
+  const stack = [...(folderNode.children || [])];
+  while (stack.length) {
+    const n = stack.pop();
+    if (n.id === possibleDescendantId) return true;
+    if (n.type === 'folder' && n.children) stack.push(...n.children);
+  }
+  return false;
+}
+
+function createUserNodeId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createUserFolder(parentId) {
+  ensureUserTree();
+  const name = (prompt('请输入文件夹名称') || '').trim();
+  if (!name) return;
+  const parentInfo = parentId ? findUserNode(parentId) : null;
+  const parentNode = parentInfo && parentInfo.node && parentInfo.node.type === 'folder' ? parentInfo.node : state.userTree;
+  if (!parentNode.children) parentNode.children = [];
+  
+  const id = createUserNodeId('user-folder');
+  parentNode.children.push({ id, type: 'folder', name, children: [] });
+  expandedUserFolders.add(parentNode.id);
+  expandedUserFolders.add(id);
+  saveState();
+  renderDocuments(elements.searchInput.value);
+}
+
+function createUserFile(parentId) {
+  ensureUserTree();
+  const title = (prompt('请输入文件名称') || '').trim();
+  if (!title) return;
+  
+  const parentInfo = parentId ? findUserNode(parentId) : null;
+  const parentNode = parentInfo && parentInfo.node && parentInfo.node.type === 'folder' ? parentInfo.node : state.userTree;
+  if (!parentNode.children) parentNode.children = [];
+  
+  const docId = createUserNodeId('user-doc');
+  const doc = {
+    id: docId,
+    title,
+    content: `# ${title}\n\n开始编写你的文档...`,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  state.documents.unshift(doc);
+  parentNode.children.unshift({ id: docId, type: 'file', name: title });
+  expandedUserFolders.add(parentNode.id);
+  saveState();
+  renderDocuments(elements.searchInput.value);
+  selectDocument(docId);
+}
+
+function renameUserNode(nodeId) {
+  const info = findUserNode(nodeId);
+  if (!info || !info.node) return;
+  const currentName = info.node.type === 'folder' ? info.node.name : (info.node.name || '');
+  const next = (prompt('请输入新名称', currentName) || '').trim();
+  if (!next) return;
+  
+  if (info.node.type === 'folder') {
+    info.node.name = next;
+  } else {
+    info.node.name = next;
+    const doc = state.documents.find(d => d.id === nodeId);
+    if (doc) {
+      doc.title = next;
+      doc.updatedAt = Date.now();
+      if (state.currentDocId === doc.id) {
+        elements.toolbarTitle.textContent = doc.title;
+      }
+    }
+  }
+  saveState();
+  renderDocuments(elements.searchInput.value);
+}
+
+function deleteUserNode(nodeId) {
+  const info = findUserNode(nodeId);
+  if (!info || !info.parent || info.index === null) return;
+  if (!confirm('确定要删除吗？')) return;
+  
+  const toDelete = info.node;
+  const fileIds = [];
+  const folderIds = [];
+  
+  const stack = [toDelete];
+  while (stack.length) {
+    const n = stack.pop();
+    if (n.type === 'file') {
+      fileIds.push(n.id);
+    } else if (n.type === 'folder') {
+      folderIds.push(n.id);
+      if (n.children) stack.push(...n.children);
+    }
+  }
+  
+  info.parent.children.splice(info.index, 1);
+  state.documents = state.documents.filter(d => !fileIds.includes(d.id));
+  folderIds.forEach(id => expandedUserFolders.delete(id));
+  
+  if (fileIds.includes(state.currentDocId)) {
+    state.currentDocId = null;
+    elements.homepage.style.display = 'block';
+    elements.markdownBody.style.display = 'none';
+    elements.toolbarTitle.textContent = 'Markdown 阅读器';
+    updateUrl('', '', true);
+  }
+  
+  saveState();
+  renderDocuments(elements.searchInput.value);
+}
+
+function moveUserNode(dragId, targetParentId, targetIndex) {
+  if (!dragId || !targetParentId) return;
+  const dragInfo = findUserNode(dragId);
+  const targetInfo = findUserNode(targetParentId);
+  if (!dragInfo || !dragInfo.parent || dragInfo.index === null) return;
+  if (!targetInfo || !targetInfo.node || targetInfo.node.type !== 'folder') return;
+  
+  if (dragInfo.node.type === 'folder') {
+    if (dragId === targetParentId) return;
+    if (isDescendantFolder(dragInfo.node, targetParentId)) return;
+  }
+  
+  const fromParent = dragInfo.parent;
+  const node = fromParent.children.splice(dragInfo.index, 1)[0];
+  
+  const toParent = targetInfo.node;
+  if (!toParent.children) toParent.children = [];
+  
+  let insertIndex = typeof targetIndex === 'number' ? targetIndex : toParent.children.length;
+  if (fromParent.id === toParent.id && dragInfo.index < insertIndex) {
+    insertIndex -= 1;
+  }
+  insertIndex = Math.max(0, Math.min(insertIndex, toParent.children.length));
+  toParent.children.splice(insertIndex, 0, node);
+  expandedUserFolders.add(toParent.id);
+  
+  saveState();
+  renderDocuments(elements.searchInput.value);
+}
+
+function openTreeNodeMenu(anchorBtn) {
+  let menu = document.getElementById('treeNodeMenu');
+  if (menu) menu.remove();
+  
+  const nodeId = anchorBtn.dataset.nodeId;
+  const info = findUserNode(nodeId);
+  if (!info || !info.node) return;
+  
+  menu = document.createElement('div');
+  menu.id = 'treeNodeMenu';
+  menu.className = 'tree-menu';
+  
+  const options = [];
+  
+  if (info.node.type === 'folder') {
+    options.push({ key: 'newFolder', label: '新建文件夹' });
+    options.push({ key: 'newFile', label: '新建文件' });
+    options.push({ key: 'rename', label: '重命名' });
+    if (info.node.id !== 'user-root') {
+      options.push({ key: 'delete', label: '删除', danger: true });
+    }
+  } else {
+    options.push({ key: 'rename', label: '重命名' });
+    options.push({ key: 'delete', label: '删除', danger: true });
+  }
+  
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = `tree-menu-option${opt.danger ? ' danger' : ''}`;
+    btn.textContent = opt.label;
+    btn.addEventListener('click', () => {
+      menu.remove();
+      if (opt.key === 'newFolder') createUserFolder(nodeId);
+      if (opt.key === 'newFile') createUserFile(nodeId);
+      if (opt.key === 'rename') renameUserNode(nodeId);
+      if (opt.key === 'delete') deleteUserNode(nodeId);
+    });
+    menu.appendChild(btn);
+  });
+  
+  document.body.appendChild(menu);
+  const rect = anchorBtn.getBoundingClientRect();
+  menu.style.left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
+  menu.style.top = (rect.bottom + 8) + 'px';
+  
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target)) menu.remove();
+  }, { once: true });
+}
+
 // ===== Document Functions =====
 function renderDocuments(filter = '') {
   // 如果有 bijiTree，渲染树形结构
@@ -376,31 +740,41 @@ function renderDocuments(filter = '') {
         return;
       }
     }
-    elements.documentList.innerHTML = renderTree(window.bijiTree, 1);
+    ensureUserTree();
+    migrateFlatUserDocsIntoTree();
+    const bijiHtml = renderTree(window.bijiTree, 1);
+    const userHtml = renderUserTree(state.userTree, 1, '');
+    elements.documentList.innerHTML = bijiHtml + userHtml;
   } else {
-    // 否则渲染普通文档列表
-    const filtered = filter
-      ? searchTrie.search(filter).length > 0 
-        ? searchTrie.search(filter)
-        : state.documents.filter(doc => 
-            doc.title.toLowerCase().includes(filter.toLowerCase()) ||
-            doc.content.toLowerCase().includes(filter.toLowerCase())
-          )
-      : state.documents;
-
-    elements.documentList.innerHTML = filtered.map(doc => {
-      return `
-      <div class="doc-item file level-1 ${doc.id === state.currentDocId ? 'active' : ''}" data-id="${doc.id}">
-        <div class="doc-title">📄 ${escapeHtml(doc.title)}</div>
-        <div class="doc-date">${formatDate(doc.updatedAt)}</div>
-        ${doc.isBiji ? '' : `
-        <div class="doc-actions">
-          <button class="btn-small delete" data-action="delete" data-id="${doc.id}">删除</button>
+    ensureUserTree();
+    migrateFlatUserDocsIntoTree();
+    
+    if (filter.trim()) {
+      const filteredDocs = state.documents.filter(doc => {
+        if (doc.isBiji || doc.isFolder) return false;
+        return (doc.title || '').toLowerCase().includes(filter.toLowerCase()) ||
+          (doc.content || '').toLowerCase().includes(filter.toLowerCase());
+      });
+      
+      if (filteredDocs.length === 0) {
+        elements.documentList.innerHTML = '<div class="doc-empty">没有找到匹配的文档</div>';
+        return;
+      }
+      
+      elements.documentList.innerHTML = filteredDocs.map(doc => {
+        return `
+        <div class="doc-item file level-1 ${doc.id === state.currentDocId ? 'active' : ''}" data-id="${doc.id}">
+          <div class="doc-title">📄 ${escapeHtml(doc.title)}</div>
+          <div class="doc-date">${formatDate(doc.updatedAt)}</div>
+          <div class="doc-actions">
+            <button class="btn-small delete" data-action="delete" data-id="${doc.id}">删除</button>
+          </div>
         </div>
-        `}
-      </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
+    } else {
+      elements.documentList.innerHTML = renderUserTree(state.userTree, 1, '');
+    }
   }
 
   addDocItemClickEvents();
@@ -412,20 +786,33 @@ function addDocItemClickEvents() {
   elements.documentList.querySelectorAll('.doc-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('delete')) return;
+      if (e.target && e.target.dataset && e.target.dataset.action === 'node-menu') return;
       
       if (item.classList.contains('folder')) {
-        // 切换文件夹展开/收起状态
+        if (item.dataset.kind === 'user') {
+          const nodeId = item.dataset.nodeId;
+          if (expandedUserFolders.has(nodeId)) {
+            expandedUserFolders.delete(nodeId);
+          } else {
+            expandedUserFolders.add(nodeId);
+          }
+          renderDocuments(elements.searchInput.value);
+          scheduleSaveState();
+          return;
+        }
+        
         const path = item.dataset.path;
         if (expandedFolders.has(path)) {
           expandedFolders.delete(path);
         } else {
           expandedFolders.add(path);
         }
-        renderDocuments();
-      } else {
-        // 打开文档
-        selectDocument(item.dataset.id);
+        renderDocuments(elements.searchInput.value);
+        scheduleSaveState();
+        return;
       }
+      
+      selectDocument(item.dataset.id);
     });
   });
 
@@ -436,10 +823,73 @@ function addDocItemClickEvents() {
       deleteDocument(btn.dataset.id);
     });
   });
+  
+  elements.documentList.querySelectorAll('[data-action="node-menu"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTreeNodeMenu(btn);
+    });
+  });
+  
+  elements.documentList.querySelectorAll('.doc-item[data-kind="user"][data-draggable="true"]').forEach(el => {
+    el.addEventListener('dragstart', (e) => {
+      const nodeId = el.dataset.nodeId;
+      if (!nodeId || nodeId === 'user-root') return;
+      e.dataTransfer.setData('text/plain', nodeId);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      elements.documentList.querySelectorAll('.doc-item.drag-over').forEach(n => n.classList.remove('drag-over'));
+    });
+    
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      el.classList.add('drag-over');
+      e.dataTransfer.dropEffect = 'move';
+    });
+    
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('drag-over');
+    });
+    
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const dragId = e.dataTransfer.getData('text/plain');
+      if (!dragId) return;
+      
+      const targetNodeId = el.dataset.nodeId;
+      const targetParentId = el.classList.contains('folder') ? targetNodeId : el.dataset.parentId;
+      
+      if (!targetParentId) return;
+      const targetInfo = findUserNode(targetNodeId);
+      
+      if (el.classList.contains('folder')) {
+        moveUserNode(dragId, targetParentId, null);
+      } else if (targetInfo && targetInfo.parent && targetInfo.index !== null) {
+        moveUserNode(dragId, targetParentId, targetInfo.index);
+      }
+    });
+  });
 }
 
 async function selectDocument(id) {
+  let options = {};
+  if (arguments.length > 1 && typeof arguments[1] === 'object' && arguments[1] !== null) {
+    options = arguments[1];
+  }
+  const headingId = options.headingId || null;
+  const shouldUpdateUrl = options.updateUrl !== false;
+  const replaceUrl = options.replaceUrl === true;
+  const shouldExpandToDoc = options.expandToDoc !== false;
+
   state.currentDocId = id;
+  if (shouldExpandToDoc) {
+    expandFoldersForDocId(id);
+  }
   let doc = state.documents.find(d => d.id === id);
   
   // 如果文档不存在或内容为空（可能还没加载），尝试从API加载
@@ -505,14 +955,24 @@ async function selectDocument(id) {
     // Trigger document changed event for page search
     document.dispatchEvent(new Event('documentChanged'));
     
-    // Restore scroll position
-    setTimeout(() => {
-      const savedPos = state.scrollPositions[id] || 0;
-      elements.readerContainer.scrollTop = savedPos;
-    }, 100);
+    if (headingId) {
+      setTimeout(() => {
+        const scrolled = scrollToHeadingId(headingId, true);
+        if (!scrolled) {
+          const savedPos = state.scrollPositions[id] || 0;
+          elements.readerContainer.scrollTop = savedPos;
+        }
+      }, 150);
+    } else {
+      setTimeout(() => {
+        const savedPos = state.scrollPositions[id] || 0;
+        elements.readerContainer.scrollTop = savedPos;
+      }, 100);
+    }
     
-    // Update URL
-    history.pushState(null, '', `#doc-${id}`);
+    if (shouldUpdateUrl) {
+      updateUrl(id, headingId, replaceUrl);
+    }
   }
   
   renderDocuments(elements.searchInput.value);
@@ -520,17 +980,21 @@ async function selectDocument(id) {
 }
 
 function createDocument(title) {
+  ensureUserTree();
+  const docId = createUserNodeId('user-doc');
   const doc = {
-    id: Date.now().toString(),
+    id: docId,
     title: title,
     content: `# ${title}\n\n开始编写你的文档...`,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
   state.documents.unshift(doc);
+  state.userTree.children.unshift({ id: docId, type: 'file', name: title });
+  expandedUserFolders.add(state.userTree.id);
   saveState();
-  renderDocuments();
-  selectDocument(doc.id);
+  renderDocuments(elements.searchInput.value);
+  selectDocument(docId);
 }
 
 function deleteDocument(id) {
@@ -543,6 +1007,10 @@ function deleteDocument(id) {
   if (!confirm('确定要删除这个文档吗？')) return;
   
   state.documents = state.documents.filter(d => d.id !== id);
+  const nodeInfo = findUserNode(id);
+  if (nodeInfo && nodeInfo.parent && nodeInfo.index !== null) {
+    nodeInfo.parent.children.splice(nodeInfo.index, 1);
+  }
   if (state.currentDocId === id) {
     state.currentDocId = null;
     elements.homepage.style.display = 'block';
@@ -566,6 +1034,7 @@ function updateDocument(id, content) {
 // 函数的主要功能是处理用户上传的文件列表，将每个文件的内容读取后转换为文档对象并添加到应用的状态中。
 // ===== Upload Functions =====
 function handleFileUpload(files) {
+  ensureUserTree();
   const fileArray = Array.from(files);
   let uploadedCount = 0;
   let errorCount = 0;
@@ -591,6 +1060,8 @@ function handleFileUpload(files) {
         };
         
         state.documents.unshift(doc);
+        state.userTree.children.unshift({ id: doc.id, type: 'file', name: doc.title });
+        expandedUserFolders.add(state.userTree.id);
         uploadedCount++;
         
         // 所有文件处理完成后保存并更新UI
@@ -638,6 +1109,8 @@ function renderMarkdown(content) {
   
   // Enhance code blocks
   enhanceCodeBlocks();
+  enhanceTables();
+  enhanceImages();
   
   // Generate TOC
   generateToc();
@@ -809,6 +1282,21 @@ function enhanceCodeBlocks() {
     const buttons = document.createElement('div');
     buttons.className = 'code-buttons';
     
+    const lineCount = (code.textContent || '').split('\n').length;
+    const shouldCollapseByDefault = lineCount > 16;
+    
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'code-btn toggle-btn';
+    toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+    toggleBtn.title = shouldCollapseByDefault ? '展开代码' : '折叠代码';
+    toggleBtn.addEventListener('click', () => {
+      const isCollapsed = wrapper.classList.toggle('collapsed');
+      toggleBtn.title = isCollapsed ? '展开代码' : '折叠代码';
+      toggleBtn.innerHTML = isCollapsed
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+    });
+    
     // Copy button
     const copyBtn = document.createElement('button');
     copyBtn.className = 'code-btn copy-btn';
@@ -833,6 +1321,7 @@ function enhanceCodeBlocks() {
       openCodeFullscreen(code.textContent, language);
     });
     
+    buttons.appendChild(toggleBtn);
     buttons.appendChild(copyBtn);
     buttons.appendChild(fullscreenBtn);
     header.appendChild(langLabel);
@@ -842,6 +1331,85 @@ function enhanceCodeBlocks() {
     pre.parentNode.insertBefore(wrapper, pre);
     wrapper.appendChild(header);
     wrapper.appendChild(pre);
+    
+    if (shouldCollapseByDefault) {
+      wrapper.classList.add('collapsed');
+    } else {
+      toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+    }
+  });
+}
+
+function enhanceTables() {
+  const tables = elements.markdownBody.querySelectorAll('table');
+  tables.forEach(table => {
+    const parent = table.parentElement;
+    if (parent && parent.classList.contains('table-wrapper')) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+}
+
+function enhanceImages() {
+  const images = elements.markdownBody.querySelectorAll('img');
+  images.forEach(img => {
+    img.classList.add('zoomable-image');
+    if (img.dataset.zoomBound === '1') return;
+    img.dataset.zoomBound = '1';
+    img.addEventListener('click', () => {
+      openImagePreview(img.currentSrc || img.src, img.alt || '');
+    });
+  });
+}
+
+function openImagePreview(src, alt) {
+  const existing = document.querySelector('.image-preview-modal');
+  if (existing) existing.remove();
+  
+  const modal = document.createElement('div');
+  modal.className = 'image-preview-modal';
+  
+  const content = document.createElement('div');
+  content.className = 'image-preview-content';
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'image-preview-close';
+  closeBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  
+  const image = document.createElement('img');
+  image.className = 'image-preview-img';
+  image.src = src;
+  image.alt = alt;
+  
+  closeBtn.addEventListener('click', () => {
+    modal.remove();
+    document.removeEventListener('keydown', handleEscape);
+  });
+  
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  });
+  
+  document.addEventListener('keydown', handleEscape);
+  
+  content.appendChild(closeBtn);
+  content.appendChild(image);
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => {
+    modal.classList.add('show');
   });
 }
 
@@ -907,9 +1475,14 @@ function generateToc() {
     return;
   }
 
+  const usedIds = new Map();
   elements.tocList.innerHTML = Array.from(headings).map((h, i) => {
-    const id = `heading-${i}`;
+    const baseId = slugifyHeading(h.textContent) || `heading-${i}`;
+    const count = (usedIds.get(baseId) || 0) + 1;
+    usedIds.set(baseId, count);
+    const id = count === 1 ? baseId : `${baseId}-${count}`;
     h.id = id;
+    h.dataset.legacyId = `heading-${i}`;
     const level = parseInt(h.tagName.substring(1));
     return `<div class="toc-item level-${level}" data-id="${id}">${escapeHtml(h.textContent)}</div>`;
   }).join('');
@@ -919,7 +1492,10 @@ function generateToc() {
     item.addEventListener('click', () => {
       const heading = document.getElementById(item.dataset.id);
       if (heading) {
-        heading.scrollIntoView({ behavior: 'smooth' });
+        scrollToHeadingId(item.dataset.id, true);
+        if (state.currentDocId) {
+          updateUrl(state.currentDocId, item.dataset.id, true);
+        }
       }
     });
   });
@@ -999,6 +1575,156 @@ function escapeHtml(text) {
 
 function formatDate(timestamp) {
   return new Date(timestamp).toLocaleDateString('zh-CN');
+}
+
+function slugifyHeading(text) {
+  const normalized = (text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return normalized;
+}
+
+function buildHash(docId, headingId) {
+  if (!docId) return '';
+  const params = new URLSearchParams();
+  params.set('doc', docId);
+  if (headingId) params.set('h', headingId);
+  return `#${params.toString()}`;
+}
+
+function parseHash() {
+  const hash = window.location.hash || '';
+  if (!hash || hash === '#') return { docId: null, headingId: null };
+  
+  if (hash.startsWith('#doc-')) {
+    const raw = hash.slice('#doc-'.length);
+    try {
+      return { docId: decodeURIComponent(raw), headingId: null };
+    } catch {
+      return { docId: raw, headingId: null };
+    }
+  }
+  
+  const rawParams = hash.startsWith('#') ? hash.slice(1) : hash;
+  const params = new URLSearchParams(rawParams);
+  const docId = params.get('doc');
+  const headingId = params.get('h');
+  return { docId, headingId };
+}
+
+function updateUrl(docId, headingId, replace = false) {
+  const next = buildHash(docId, headingId);
+  if (!next) return;
+  if (replace) {
+    history.replaceState(null, '', next);
+  } else {
+    history.pushState(null, '', next);
+  }
+}
+
+function scrollToHeadingId(headingId, smooth = false) {
+  if (!headingId) return false;
+  let heading = document.getElementById(headingId);
+  if (!heading) {
+    const escaped = (window.CSS && typeof window.CSS.escape === 'function') ? window.CSS.escape(headingId) : headingId.replace(/"/g, '\\"');
+    heading = document.querySelector(`[data-legacy-id="${escaped}"]`);
+  }
+  if (!heading) return false;
+  
+  const container = elements.readerContainer;
+  const offset = 72;
+  const containerRect = container.getBoundingClientRect();
+  const headingRect = heading.getBoundingClientRect();
+  const top = (headingRect.top - containerRect.top) + container.scrollTop - offset;
+  container.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+  return true;
+}
+
+function expandFoldersForDocId(docId) {
+  if (!docId || !docId.startsWith('biji-')) return;
+  const filePath = docId.replace('biji-', '').replace(/\\/g, '/');
+  const parts = filePath.split('/').filter(Boolean);
+  if (parts.length <= 1) return;
+  let current = '';
+  for (let i = 0; i < parts.length - 1; i++) {
+    current = current ? `${current}/${parts[i]}` : parts[i];
+    expandedFolders.add(current);
+  }
+}
+
+let pendingRoute = null;
+let urlSyncTimer = null;
+let lastSynced = { docId: null, headingId: null };
+let deferredInstallPromptEvent = null;
+
+function scheduleSaveState() {
+  clearTimeout(urlSyncTimer);
+  urlSyncTimer = setTimeout(() => {
+    saveState();
+  }, 250);
+}
+
+async function routeFromLocation() {
+  const { docId, headingId } = parseHash();
+  if (!docId) return false;
+  
+  pendingRoute = { docId, headingId };
+  expandFoldersForDocId(docId);
+  renderDocuments(elements.searchInput.value);
+  await selectDocument(docId, { headingId, updateUrl: false });
+  return true;
+}
+
+function isStandaloneMode() {
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  } catch {
+    return false;
+  }
+}
+
+function updateInstallButtonState() {
+  const btn = document.getElementById('btnInstallPwa');
+  if (!btn) return;
+  if (isStandaloneMode()) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+}
+
+async function handleInstallPwaClick() {
+  if (isStandaloneMode()) {
+    alert('应用已安装');
+    return;
+  }
+  
+  if (deferredInstallPromptEvent) {
+    deferredInstallPromptEvent.prompt();
+    try {
+      await deferredInstallPromptEvent.userChoice;
+    } finally {
+      deferredInstallPromptEvent = null;
+      updateInstallButtonState();
+    }
+    return;
+  }
+  
+  alert('浏览器未提供一键安装提示。\n\nEdge：右上角 … → 应用 → 将此站点作为应用安装\nChrome：右上角 … → 安装应用');
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/service-worker.js');
+  } catch (e) {
+    console.warn('Service Worker 注册失败:', e);
+  }
 }
 
 // ===== Event Listeners =====
@@ -1297,6 +2023,14 @@ ${marked.parse(doc.content)}
     e.stopPropagation();
     createExportMenu();
   });
+  
+  const installBtn = document.getElementById('btnInstallPwa');
+  if (installBtn) {
+    installBtn.addEventListener('click', () => {
+      handleInstallPwaClick();
+    });
+    updateInstallButtonState();
+  }
 
   // Theme toggle
   document.getElementById('btnTheme').addEventListener('click', () => {
@@ -1390,6 +2124,7 @@ ${marked.parse(doc.content)}
     // Save scroll position
     if (state.currentDocId) {
       state.scrollPositions[state.currentDocId] = elements.readerContainer.scrollTop;
+      scheduleSaveState();
     }
 
     // Update progress bar
@@ -1417,15 +2152,29 @@ ${marked.parse(doc.content)}
       elements.settingsPanel.classList.remove('open');
     }
   });
-
-  // URL hash 处理：如果 URL 包含文档 hash，自动打开对应文档
-  // 例如：http://localhost:5000/#doc-biji-必备算法.md
-  if (window.location.hash) {
-    const docId = window.location.hash.replace('#doc-', '');
-    if (docId && state.documents.find(d => d.id === docId)) {
-      selectDocument(docId);
-    }
-  }
+  
+  window.addEventListener('hashchange', () => {
+    routeFromLocation();
+  });
+  
+  window.addEventListener('popstate', () => {
+    routeFromLocation();
+  });
+  
+  window.addEventListener('beforeunload', () => {
+    saveState();
+  });
+  
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPromptEvent = e;
+    updateInstallButtonState();
+  });
+  
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPromptEvent = null;
+    updateInstallButtonState();
+  });
 }
 
 function closeModal() {
@@ -1449,10 +2198,18 @@ function updateActiveTocItem() {
   elements.tocList.querySelectorAll('.toc-item').forEach(item => {
     item.classList.toggle('active', item.dataset.id === currentId);
   });
+  
+  if (state.currentDocId && currentId) {
+    if (lastSynced.docId !== state.currentDocId || lastSynced.headingId !== currentId) {
+      lastSynced = { docId: state.currentDocId, headingId: currentId };
+      updateUrl(state.currentDocId, currentId, true);
+    }
+  }
 }
 
 // ===== Initialize =====
 async function init() {
+  await registerServiceWorker();
   loadState();
   applySettings();
   initEventListeners();
@@ -1462,19 +2219,17 @@ async function init() {
   
   // 现在渲染文档列表（树形结构）
   renderDocuments();
-  
-  // Auto open last read document if exists
-  setTimeout(() => {
-    openLastReadDocument();
-  }, 100);
+
+  const routed = await routeFromLocation();
+  if (!routed && state.currentDocId) {
+    renderDocuments(elements.searchInput.value);
+    await selectDocument(state.currentDocId, { updateUrl: true, replaceUrl: true, expandToDoc: false });
+  }
 }
 
 function openLastReadDocument() {
   if (state.currentDocId) {
-    const doc = state.documents.find(d => d.id === state.currentDocId);
-    if (doc && !doc.isFolder) {
-      openDocument(doc);
-    }
+    selectDocument(state.currentDocId);
   }
 }
 

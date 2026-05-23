@@ -5,18 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"const fs=require('fs');fs.cpSync('file-list.json','dist/file-list.json');fs.cpSync('biji','dist/biji',{recursive:true});\"",
+    "build": "node scan-files.js && vite build && node -e \"import('fs').then(({default:fs})=>{fs.copyFileSync('file-list.json','dist/file-list.json');fs.cpSync('biji','dist/biji',{recursive:true});})\"",
     "preview": "vite preview",
-    "scan": "python scan-files.py"
+    "scan": "node scan-files.js"
   },
   "dependencies": {
-    "vue": "^3.4.21",
-    "vue-router": "^4.3.0",
+    "highlight.js": "^11.9.0",
     "marked": "^12.0.0",
-    "highlight.js": "^11.9.0"
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
+    "gh-pages": "^6.3.0",
     "vite": "^5.2.0"
   }
 }

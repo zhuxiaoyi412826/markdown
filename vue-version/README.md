@@ -1,6 +1,6 @@
-# Markdown 笔记阅读器
+# Markdown 笔记阅读器 - Vue 3 版本
 
-一个基于 Vue 3 的现代化 Markdown 笔记阅读器，支持树形文件夹结构、代码高亮、主题切换等功能。
+一个基于 Vue 3 的纯前端 Markdown 笔记阅读器，支持树形文件夹结构、代码高亮、主题切换等功能。
 
 ## 功能特性
 
@@ -9,16 +9,19 @@
 - ✅ **实时 Markdown 渲染** - 完整的 GFM 支持
 - ✅ **代码语法高亮** - 基于 Highlight.js
 - ✅ **主题切换** - 日间/夜间模式
-- ✅ **专注阅读模式** - 隐藏侧边栏，沉浸式阅读
 - ✅ **响应式布局** - 适配桌面和移动端
-- ✅ **本地存储** - 自动保存阅读进度和设置
 - ✅ **GitHub Pages 部署** - 完整的 CI/CD 自动部署
+- ✅ **本地存储** - 自动保存阅读进度和设置
 
 ## 快速开始
 
 ### 本地开发
 
 ```bash
+# 克隆仓库
+git clone https://github.com/你的用户名/markdown-reader.git
+cd markdown-reader/vue-version
+
 # 安装依赖
 npm install
 
@@ -37,8 +40,39 @@ npm run dev
 # 构建生产版本
 npm run build
 
-# 预览构建结果
+# 预览生产版本
 npm run preview
+```
+
+## 文件结构
+
+```
+vue-version/
+├── public/
+│   ├── img/              # 图片资源
+│   └── vendor/           # 第三方库（CSS）
+├── src/
+│   ├── components/       # Vue 组件
+│   │   ├── DocumentList.vue      # 文档列表组件
+│   │   ├── TableOfContents.vue   # 目录组件
+│   │   └── SettingsModal.vue      # 设置弹窗
+│   ├── composables/      # 组合式函数
+│   │   ├── useStore.js          # 状态管理
+│   │   └── useMarkdown.js       # Markdown 处理
+│   ├── pages/            # 页面组件
+│   │   ├── HomePage.vue         # 主页
+│   │   └── DocumentPage.vue     # 文档页
+│   ├── App.vue           # 根组件
+│   ├── main.js          # 入口文件
+│   └── style.css        # 全局样式
+├── .github/
+│   └── workflows/
+│       └── deploy.yml    # GitHub Actions 部署配置
+├── index.html           # HTML 模板
+├── package.json         # 项目配置
+├── vite.config.js       # Vite 配置
+├── scan-files.py        # 文件扫描脚本
+└── README.md
 ```
 
 ## 部署到 GitHub Pages
@@ -54,7 +88,7 @@ npm run preview
 3. **推送代码到 main 分支**
    ```bash
    git add .
-   git commit -m "feat: 初始化项目"
+   git commit -m "feat: 初始化 Vue 版本"
    git push origin main
    ```
 
@@ -88,36 +122,6 @@ npm run preview
    - 进入仓库 Settings > Pages
    - Source 选择 "gh-pages" 分支
 
-## 项目结构
-
-```
-├── public/
-│   ├── img/              # 图片资源
-│   └── vendor/           # 第三方库（CSS）
-├── src/
-│   ├── components/       # Vue 组件
-│   │   ├── DocumentList.vue      # 文档列表组件
-│   │   ├── TableOfContents.vue   # 目录组件
-│   │   └── SettingsModal.vue      # 设置弹窗
-│   ├── composables/      # 组合式函数
-│   │   ├── useStore.js          # 状态管理
-│   │   └── useMarkdown.js       # Markdown 处理
-│   ├── pages/            # 页面组件
-│   │   ├── HomePage.vue         # 主页
-│   │   └── DocumentPage.vue     # 文档页
-│   ├── App.vue           # 根组件
-│   ├── main.js          # 入口文件
-│   └── style.css        # 全局样式
-├── .github/
-│   └── workflows/
-│       └── deploy.yml    # GitHub Actions 部署配置
-├── index.html           # HTML 模板
-├── package.json         # 项目配置
-├── vite.config.js       # Vite 配置
-├── scan-files.py        # 文件扫描脚本
-└── README.md
-```
-
 ## 添加文档
 
 ### 1. 添加 Markdown 文件
@@ -125,12 +129,12 @@ npm run preview
 将 `.md` 文件放入 `biji` 文件夹：
 
 ```
-biji/
+vue-version/biji/
 ├── javase/
 │   └── API.md
 ├── 数据结构/
-│   ├── 数据结构.md
-│   └── 树堆图.md
+│   ├── 树.md
+│   └── 图.md
 └── 算法/
     └── 排序.md
 ```
